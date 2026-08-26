@@ -12,7 +12,7 @@ import { getDb } from "./db/index.js";
 import { registerTrackRoutes } from "./routes/tracks.js";
 import { registerAdminRoutes } from "./routes/admin.js";
 import { addClient, removeClient, broadcast } from "./ws/broadcast.js";
-import { buildState, notifyStateChange } from "./services/queue.js";
+import { buildState, notifyStateChange, resetToEmptySession } from "./services/queue.js";
 import { player } from "./services/player.js";
 import { kickDownloads, setDownloaderEventMode } from "./services/downloader.js";
 import { scanMediaLibrary } from "./services/mediaIndex.js";
@@ -21,6 +21,10 @@ import { log } from "./logger.js";
 const config = loadConfig();
 ensureDirs();
 getDb();
+const sessionReset = resetToEmptySession();
+if (sessionReset.stoppedPlaying || sessionReset.clearedQueue > 0) {
+  log.info(`[queue] fresh start — cleared queue (${sessionReset.clearedQueue}), stopped previous track`);
+}
 void scanMediaLibrary().catch((err) => log.warn("[media] scan failed:", err));
 
 const tls = await ensureTlsCert();
@@ -96,7 +100,6 @@ try {
   player.setEventMode(config.eventMode);
   setDownloaderEventMode(config.eventMode);
   player.onTrackEnd(() => notifyStateChange(config.eventMode));
-  await player.resumePlayback();
   kickDownloads();
 } catch (err) {
   log.warn("mpv not available — playback disabled until mpv is installed:", (err as Error).message);

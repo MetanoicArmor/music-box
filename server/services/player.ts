@@ -55,8 +55,8 @@ export class MpvPlayer {
   private eventMode = false;
   private playing = false;
   private ipcReady = false;
-  private suppressEndFile = false;
   private blockAutoAdvance = false;
+  private fileLoadedWaiters: Array<() => void> = [];
   private navigationLock: Promise<void> = Promise.resolve();
   private nextRequestId = 1;
   private pendingRequests = new Map<number, PendingRequest>();
@@ -186,6 +186,7 @@ export class MpvPlayer {
       }
     });
     this.sendCommand(["enable_event", "end-file", true]);
+    this.sendCommand(["enable_event", "file-loaded", true]);
   }
 
   private reconnectIpc(): void {
@@ -218,12 +219,19 @@ export class MpvPlayer {
           }
           continue;
         }
+        if (msg.event === "file-loaded") {
+          this.resolveFileLoaded();
+          continue;
+        }
         if (msg.event === "end-file") {
-          this.playing = false;
-          if (this.blockAutoAdvance || this.suppressEndFile) {
-            this.suppressEndFile = false;
+          const reason = String(msg.reason ?? "");
+          if (reason !== "eof") {
             continue;
           }
+          if (this.blockAutoAdvance) {
+            continue;
+          }
+          this.playing = false;
           markCurrentPlayed();
           this.onEndCallback?.();
           void this.runExclusive(() => this.playNext());
@@ -243,14 +251,38 @@ export class MpvPlayer {
     return next;
   }
 
-  private async withManualNavigation(fn: () => Promise<void>): Promise<void> {
+  private resolveFileLoaded(): void {
+    const waiters = this.fileLoadedWaiters;
+    this.fileLoadedWaiters = [];
+    for (const resolve of waiters) resolve();
+  }
+
+  private waitForFileLoaded(timeoutMs: number): Promise<void> {
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this.fileLoadedWaiters = this.fileLoadedWaiters.filter((w) => w !== onLoaded);
+        resolve();
+      }, timeoutMs);
+      const onLoaded = () => {
+        clearTimeout(timer);
+        resolve();
+      };
+      this.fileLoadedWaiters.push(onLoaded);
+    });
+  }
+
+  private async withManualNavigation(fn: () => Promise<void>, waitForLoad = true): Promise<void> {
     this.blockAutoAdvance = true;
-    this.suppressEndFile = true;
+    const loaded = waitForLoad ? this.waitForFileLoaded(800) : Promise.resolve();
     try {
       await fn();
     } finally {
-      this.blockAutoAdvance = false;
-      this.suppressEndFile = false;
+      try {
+        await loaded;
+        await new Promise((r) => setTimeout(r, 150));
+      } finally {
+        this.blockAutoAdvance = false;
+      }
     }
   }
 
@@ -402,14 +434,30 @@ export class MpvPlayer {
     await this.playNext();
   }
 
-  skip(): void {
-    void this.runExclusive(async () => {
+  async skip(): Promise<void> {
+    await this.runExclusive(async () => {
+      const next = getNextTrack();
+      const willLoad = Boolean(next && this.isPlayable(next));
       await this.withManualNavigation(async () => {
-        this.sendCommand(["stop"]);
         markCurrentPlayed();
         this.playing = false;
-        await this.playNext();
-      });
+        if (willLoad && next) {
+          try {
+            const ok = await this.playTrack(next);
+            if (!ok) {
+              this.sendCommand(["stop"]);
+              notifyStateChange(this.eventMode);
+            }
+          } catch (err) {
+            log.error("[mpv] skip failed:", err);
+            this.sendCommand(["stop"]);
+            notifyStateChange(this.eventMode);
+          }
+        } else {
+          this.sendCommand(["stop"]);
+          notifyStateChange(this.eventMode);
+        }
+      }, willLoad);
     });
   }
 
@@ -421,8 +469,6 @@ export class MpvPlayer {
     try {
       await this.runExclusive(async () => {
         await this.withManualNavigation(async () => {
-          this.sendCommand(["stop"]);
-          await new Promise((r) => setTimeout(r, 80));
           requeueCurrentTrack();
           this.playing = false;
           await this.playTrack(prev);
@@ -436,14 +482,14 @@ export class MpvPlayer {
     }
   }
 
-  stopPlayback(): void {
-    void this.runExclusive(async () => {
+  async stopPlayback(): Promise<void> {
+    await this.runExclusive(async () => {
       await this.withManualNavigation(async () => {
         this.sendCommand(["stop"]);
         markCurrentPlayed();
         this.playing = false;
         notifyStateChange(this.eventMode);
-      });
+      }, false);
     });
   }
 

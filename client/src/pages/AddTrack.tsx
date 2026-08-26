@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from "react";
-import { AppState, apiClient, SearchResults, SearchSuggestion } from "../api";
+import { useState, useRef, useEffect, useMemo } from "react";
+import { AppState, Track, apiClient, SearchResults, SearchSuggestion, LibraryTrack } from "../api";
 
 interface Props {
   state: AppState;
@@ -10,6 +10,11 @@ function isDirectUrl(value: string): boolean {
   return /youtube\.com|youtu\.be|spotify\.com/i.test(value);
 }
 
+function sameLocalPath(a: string | null | undefined, b: string): boolean {
+  if (!a) return false;
+  return a.replace(/\\/g, "/").toLowerCase() === b.replace(/\\/g, "/").toLowerCase();
+}
+
 export default function AddTrackPage({ state, refresh }: Props) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -18,20 +23,58 @@ export default function AddTrackPage({ state, refresh }: Props) {
   const [success, setSuccess] = useState("");
   const [results, setResults] = useState<SearchResults | null>(null);
   const [open, setOpen] = useState(false);
+  const [library, setLibrary] = useState<LibraryTrack[]>([]);
+  const [libraryTotal, setLibraryTotal] = useState(0);
+  const [libraryQuery, setLibraryQuery] = useState("");
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [librarySearching, setLibrarySearching] = useState(false);
+  const [addingPath, setAddingPath] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const libraryWrapRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const libraryDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const seqRef = useRef(0);
+  const librarySeqRef = useRef(0);
+
+  const loadLibrary = async (q = "", opts?: { open?: boolean }) => {
+    const seq = ++librarySeqRef.current;
+    setLibrarySearching(true);
+    try {
+      const data = await apiClient.getLibrary(q);
+      if (seq !== librarySeqRef.current) return;
+      setLibrary(data.tracks);
+      if (!q.trim()) setLibraryTotal(data.total);
+      if (opts?.open) setLibraryOpen(true);
+    } catch {
+      if (seq !== librarySeqRef.current) return;
+      setLibrary([]);
+    } finally {
+      if (seq === librarySeqRef.current) setLibrarySearching(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadLibrary();
+  }, []);
 
   useEffect(() => {
     const onDoc = (e: MouseEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (wrapRef.current && !wrapRef.current.contains(target)) {
         setOpen(false);
+      }
+      if (libraryWrapRef.current && !libraryWrapRef.current.contains(target)) {
+        setLibraryOpen(false);
       }
     };
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
   }, []);
+
+  const live = useMemo(() => {
+    return [state.current, ...state.queue].filter((t): t is Track => !!t);
+  }, [state.current, state.queue]);
 
   if (state.eventMode) {
     return (
@@ -65,6 +108,15 @@ export default function AddTrackPage({ state, refresh }: Props) {
         if (seq === seqRef.current) setSearching(false);
       }
     }, 350);
+  };
+
+  const runLibrarySearch = (value: string) => {
+    if (libraryDebounceRef.current) clearTimeout(libraryDebounceRef.current);
+    setLibraryQuery(value);
+    setLibraryOpen(true);
+    libraryDebounceRef.current = setTimeout(() => {
+      void loadLibrary(value, { open: true });
+    }, 250);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -110,6 +162,29 @@ export default function AddTrackPage({ state, refresh }: Props) {
     }
   };
 
+  const addLibraryTrack = async (item: LibraryTrack) => {
+    setAddingPath(item.sourceRef);
+    setError("");
+    setSuccess("");
+    setLibraryOpen(false);
+    try {
+      await apiClient.addSuggestion({
+        title: item.title,
+        artist: item.artist,
+        source: "local",
+        sourceRef: item.sourceRef,
+      });
+      setLibraryQuery("");
+      setSuccess(`«${item.title}» добавлен в очередь`);
+      await refresh();
+      await loadLibrary();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ошибка");
+    } finally {
+      setAddingPath(null);
+    }
+  };
+
   const handleFile = async (file: File) => {
     setLoading(true);
     setError("");
@@ -123,6 +198,7 @@ export default function AddTrackPage({ state, refresh }: Props) {
       });
       setSuccess(`«${uploaded.title}» добавлен!`);
       await refresh();
+      await loadLibrary(libraryQuery);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка загрузки");
     } finally {
@@ -131,6 +207,7 @@ export default function AddTrackPage({ state, refresh }: Props) {
   };
 
   const showDropdown = open && !loading && results && (results.local.length > 0 || results.youtube.length > 0 || searching);
+  const showLibraryDropdown = libraryOpen && !loading;
 
   return (
     <div>
@@ -159,7 +236,7 @@ export default function AddTrackPage({ state, refresh }: Props) {
             <div className="search-dropdown">
               {results!.local.length > 0 && (
                 <div className="search-group">
-                  <div className="search-group-title">Уже было</div>
+                  <div className="search-group-title">Локально</div>
                   {results!.local.map((item, i) => (
                     <button
                       key={`l-${i}`}
@@ -167,8 +244,11 @@ export default function AddTrackPage({ state, refresh }: Props) {
                       className="search-item"
                       onClick={() => pickSuggestion(item)}
                     >
-                      <span className="search-item-title">{item.title}</span>
-                      <span className="search-item-meta">{item.artist} · {item.source}</span>
+                      <span className="search-item-icon" aria-hidden="true">♪</span>
+                      <span className="search-item-body">
+                        <span className="search-item-title">{item.title}</span>
+                        <span className="search-item-meta">{item.artist} · {item.source}</span>
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -202,6 +282,63 @@ export default function AddTrackPage({ state, refresh }: Props) {
           {loading ? "Добавляю..." : "Добавить в очередь"}
         </button>
       </form>
+
+      <div className="divider">или</div>
+
+      <div className="form-group search-wrap" ref={libraryWrapRef}>
+        <label>Локальная библиотека{libraryTotal > 0 ? ` (${libraryTotal})` : ""}</label>
+        <input
+          type="text"
+          placeholder="Название или исполнитель из media/"
+          value={libraryQuery}
+          onChange={(e) => runLibrarySearch(e.target.value)}
+          onFocus={() => {
+            setLibraryOpen(true);
+            if (library.length === 0) void loadLibrary(libraryQuery, { open: true });
+          }}
+          disabled={loading}
+          autoComplete="off"
+        />
+        {librarySearching && <div className="search-status">Ищу…</div>}
+        {showLibraryDropdown && (
+          <div className="search-dropdown">
+            {library.length > 0 && (
+              <div className="search-group">
+                <div className="search-group-title">Локально</div>
+                {library.map((item) => {
+                  const queued = live.some((t) => sameLocalPath(t.file_path, item.sourceRef));
+                  const meta = [item.artist, item.album].filter(Boolean).join(" · ") || item.filename;
+                  return (
+                    <button
+                      key={item.sourceRef}
+                      type="button"
+                      className={`search-item${queued ? " is-queued" : ""}`}
+                      disabled={queued || addingPath === item.sourceRef}
+                      onClick={() => addLibraryTrack(item)}
+                    >
+                      <span className="search-item-icon" aria-hidden="true">♪</span>
+                      <span className="search-item-body">
+                        <span className="search-item-title">{item.title}</span>
+                        <span className="search-item-meta">{meta}</span>
+                      </span>
+                      <span className="search-item-action">
+                        {queued ? "В очереди" : addingPath === item.sourceRef ? "…" : "В очередь"}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {!librarySearching && library.length === 0 && (
+              <div className="search-empty">
+                {libraryQuery.trim()
+                  ? "Ничего не найдено"
+                  : "Библиотека пуста — положите аудио в media/"}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       <div className="divider">или</div>
 

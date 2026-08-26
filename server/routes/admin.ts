@@ -6,6 +6,8 @@ import {
   clearQueue,
   banSession,
   banIp,
+  unbanSession,
+  unbanIp,
   logAdminAction,
   getAdminLog,
   notifyStateChange,
@@ -63,11 +65,11 @@ export async function registerAdminRoutes(app: FastifyInstance, config: AppConfi
 
     removeTrack(id, "admin_removed");
     logAdminAction("remove_track", `${track.artist} - ${track.title}`);
-    notifyStateChange(config.eventMode);
 
     if (track.status === "playing") {
-      player.skip();
+      await player.skip();
     }
+    notifyStateChange(config.eventMode);
     return { ok: true };
   });
 
@@ -96,9 +98,24 @@ export async function registerAdminRoutes(app: FastifyInstance, config: AppConfi
     return { ok: true };
   });
 
+  app.post("/api/admin/unban", async (request, reply) => {
+    if (!requireAdmin(request, reply)) return;
+    const body = request.body as { sessionId?: string; ip?: string };
+    if (body.sessionId) {
+      unbanSession(body.sessionId);
+      logAdminAction("unban_session", body.sessionId);
+    } else if (body.ip) {
+      unbanIp(normalizeClientIp(body.ip.trim()));
+      logAdminAction("unban_ip", body.ip);
+    } else {
+      return reply.status(400).send({ error: "sessionId or ip required" });
+    }
+    return { ok: true };
+  });
+
   app.post("/api/admin/skip", async (request, reply) => {
     if (!requireAdmin(request, reply)) return;
-    player.skip();
+    await player.skip();
     logAdminAction("skip");
     notifyStateChange(config.eventMode);
     return { ok: true };
@@ -122,7 +139,7 @@ export async function registerAdminRoutes(app: FastifyInstance, config: AppConfi
 
   app.post("/api/admin/stop", async (request, reply) => {
     if (!requireAdmin(request, reply)) return;
-    player.stopPlayback();
+    await player.stopPlayback();
     logAdminAction("stop");
     notifyStateChange(config.eventMode);
     return { ok: true };

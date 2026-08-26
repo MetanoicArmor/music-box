@@ -43,7 +43,6 @@ export function useMusicBox() {
             userVotes: prev.userVotes,
             sessionId: prev.sessionId,
           }));
-          refresh();
         }
       } catch {
         // ignore

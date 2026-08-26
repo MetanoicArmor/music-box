@@ -476,6 +476,18 @@ a {
   opacity: 0.88;
 }
 
+.history-search {
+  margin-bottom: 12px;
+}
+
+.history-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .history-meta {
   display: flex;
   flex-direction: column;
@@ -489,6 +501,12 @@ a {
 .history-votes {
   font-weight: 600;
   color: var(--text-secondary);
+}
+
+.history-readd {
+  width: auto;
+  padding: 8px 12px;
+  font-size: 0.75rem;
 }
 
 /* ── Empty states ── */
@@ -1035,9 +1053,37 @@ a {
   border: 1px solid var(--border-strong);
   border-radius: 14px;
   box-shadow: var(--shadow-lg);
-  overflow: hidden;
   max-height: 360px;
+  overflow-x: hidden;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+}
+
+.search-dropdown::-webkit-scrollbar {
+  width: 8px;
+}
+
+.search-dropdown::-webkit-scrollbar-track {
+  margin: 8px 0;
+  background: transparent;
+}
+
+.search-dropdown::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: var(--radius-pill);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.search-dropdown::-webkit-scrollbar-thumb:hover {
+  background: rgba(250, 45, 72, 0.55);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.search-dropdown::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 .search-group-title {
@@ -1064,6 +1110,27 @@ a {
   background: var(--bg-hover);
 }
 
+.search-item:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.search-item.is-queued {
+  opacity: 0.7;
+}
+
+.search-item-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  background: rgba(118, 118, 128, 0.22);
+  color: var(--text-secondary);
+  font-size: 1.125rem;
+}
+
 .search-item-body {
   display: flex;
   flex-direction: column;
@@ -1086,6 +1153,13 @@ a {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.search-item-action {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--accent);
 }
 
 .search-thumb {
@@ -1147,4 +1221,13 @@ a {
   font-weight: 600;
   background: rgba(255, 69, 58, 0.14);
   color: var(--down);
+}
+
+.ip-unban {
+  padding: 2px 8px;
+  border-radius: 8px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  background: rgba(48, 209, 88, 0.14);
+  color: var(--up);
 }

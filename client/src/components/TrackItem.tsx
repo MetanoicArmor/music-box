@@ -9,6 +9,7 @@ interface Props {
   onDelete?: (id: string) => void;
   onDeleteArtist?: (artist: string) => void;
   onBanIp?: (ip: string) => void;
+  onUnbanIp?: (ip: string) => void;
 }
 
 function downloadLabel(track: Track): { text: string; className: string } | null {
@@ -20,7 +21,7 @@ function downloadLabel(track: Track): { text: string; className: string } | null
   return null;
 }
 
-export default function TrackItem({ track, index, myVote, onVote, admin, onDelete, onDeleteArtist, onBanIp }: Props) {
+export default function TrackItem({ track, index, myVote, onVote, admin, onDelete, onDeleteArtist, onBanIp, onUnbanIp }: Props) {
   const badge = downloadLabel(track);
 
   return (
@@ -43,6 +44,11 @@ export default function TrackItem({ track, index, myVote, onVote, admin, onDelet
             {onBanIp && (
               <button type="button" className="ip-ban" onClick={() => onBanIp(track.addedByIp!)}>
                 Ban
+              </button>
+            )}
+            {onUnbanIp && (
+              <button type="button" className="ip-unban" onClick={() => onUnbanIp(track.addedByIp!)}>
+                Unban
               </button>
             )}
           </div>

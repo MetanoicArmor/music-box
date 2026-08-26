@@ -17,12 +17,15 @@ import {
   getUserVotes,
   getTrackById,
   searchLocalTracks,
+  searchPlayedTracks,
+  readdPlayedTrack,
+  enrichTrack,
 } from "../services/queue.js";
 import { resolveInput, isOnline, searchYouTubeMany, detectSource } from "../services/resolver.js";
 import { player } from "../services/player.js";
 import { kickDownloads } from "../services/downloader.js";
 import { readFileTags } from "../services/tags.js";
-import { indexMediaFile, searchMediaIndex } from "../services/mediaIndex.js";
+import { indexMediaFile, listMediaLibrary, searchMediaIndex } from "../services/mediaIndex.js";
 
 const SESSION_COOKIE = "mb_session";
 
@@ -170,6 +173,56 @@ export async function registerTrackRoutes(app: FastifyInstance, config: AppConfi
       const msg = err instanceof Error ? err.message : "Failed to resolve track";
       return reply.status(400).send({ error: msg });
     }
+  });
+
+  app.get("/api/history/search", async (request, reply) => {
+    const sessionId = requireSession(request, reply, config);
+    if (!sessionId) return;
+
+    const q = String((request.query as { q?: string }).q ?? "").trim();
+    const tracks = searchPlayedTracks(q, 40).map(enrichTrack);
+    return { tracks };
+  });
+
+  app.post("/api/tracks/:id/readd", async (request, reply) => {
+    const sessionId = requireSession(request, reply, config);
+    if (!sessionId) return;
+
+    if (config.eventMode) {
+      return reply.status(403).send({ error: "Adding tracks is disabled in event mode" });
+    }
+
+    const { id } = request.params as { id: string };
+    try {
+      const track = readdPlayedTrack(id, sessionId);
+      notifyStateChange(config.eventMode);
+      if (track.download_status === "pending") {
+        kickDownloads();
+      } else {
+        await player.startPlaybackIfIdle();
+      }
+      return track;
+    } catch (err) {
+      const status = (err as { statusCode?: number }).statusCode ?? 400;
+      const message = err instanceof Error ? err.message : "Failed to readd track";
+      return reply.status(status).send({ error: message });
+    }
+  });
+
+  app.get("/api/library", async (request, reply) => {
+    const sessionId = requireSession(request, reply, config);
+    if (!sessionId) return;
+
+    const q = String((request.query as { q?: string }).q ?? "").trim();
+    const tracks = listMediaLibrary(q, 200).map((row) => ({
+      title: row.title,
+      artist: row.artist,
+      album: row.album,
+      source: "local" as const,
+      sourceRef: row.file_path,
+      filename: row.filename,
+    }));
+    return { tracks, total: tracks.length };
   });
 
   app.get("/api/search", async (request, reply) => {

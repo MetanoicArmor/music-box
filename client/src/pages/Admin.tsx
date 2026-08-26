@@ -276,6 +276,13 @@ export default function AdminPage({ state, refresh }: Props) {
     await loadLog();
   };
 
+  const handleUnban = async () => {
+    if (!banIp.trim()) return;
+    await apiClient.adminUnban({ ip: banIp.trim() });
+    setBanIp("");
+    await loadLog();
+  };
+
   if (!isAdmin) {
     return (
       <div className="login-form">
@@ -343,6 +350,9 @@ export default function AdminPage({ state, refresh }: Props) {
           <button className="btn btn-danger" onClick={handleBan}>
             Ban
           </button>
+          <button className="btn btn-secondary" onClick={handleUnban}>
+            Unban
+          </button>
         </div>
       </div>
 
@@ -359,6 +369,9 @@ export default function AdminPage({ state, refresh }: Props) {
             onDeleteArtist={handleDeleteArtist}
             onBanIp={(ip) => {
               apiClient.adminBan({ ip }).then(() => loadLog());
+            }}
+            onUnbanIp={(ip) => {
+              apiClient.adminUnban({ ip }).then(() => loadLog());
             }}
           />
         ))}

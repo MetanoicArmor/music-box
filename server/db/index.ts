@@ -13,6 +13,10 @@ export function getDb(): Database.Database {
     db = new Database(PATHS.db);
     db.pragma("journal_mode = WAL");
     db.pragma("foreign_keys = ON");
+    const hasTracks = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='tracks'").get();
+    if (hasTracks) {
+      migrateDb(db);
+    }
     const schemaPath = path.join(PATHS.root, "server", "db", "schema.sql");
     const schema = fs.readFileSync(schemaPath, "utf-8");
     db.exec(schema);

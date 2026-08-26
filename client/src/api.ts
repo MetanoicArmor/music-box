@@ -29,6 +29,15 @@ export interface SearchResults {
   youtube: SearchSuggestion[];
 }
 
+export interface LibraryTrack {
+  title: string;
+  artist: string;
+  album: string;
+  source: "local";
+  sourceRef: string;
+  filename: string;
+}
+
 export interface AppState {
   current: Track | null;
   queue: Track[];
@@ -102,6 +111,9 @@ export const apiClient = {
   addLocalTrack: (data: { title: string; artist?: string; filePath: string }) =>
     api<Track>("/api/tracks", { method: "POST", body: JSON.stringify(data) }),
   search: (q: string) => api<SearchResults>(`/api/search?q=${encodeURIComponent(q)}`),
+  getLibrary: (q = "") => api<{ tracks: LibraryTrack[]; total: number }>(`/api/library?q=${encodeURIComponent(q)}`),
+  searchHistory: (q: string) => api<{ tracks: Track[] }>(`/api/history/search?q=${encodeURIComponent(q)}`),
+  readdTrack: (id: string) => api<Track>(`/api/tracks/${id}/readd`, { method: "POST" }),
   vote: (id: string, direction: "up" | "down") =>
     api<{ track: Track | null }>(`/api/tracks/${id}/vote`, { method: "POST", body: JSON.stringify({ direction }) }),
   upload: (file: File) => {
@@ -117,6 +129,7 @@ export const apiClient = {
   adminDeleteTrack: (id: string) => api<{ ok: boolean }>(`/api/admin/tracks/${id}`, { method: "DELETE" }),
   adminDeleteArtist: (name: string) => api<{ removed: number }>(`/api/admin/artists/${encodeURIComponent(name)}`, { method: "DELETE" }),
   adminBan: (data: { sessionId?: string; ip?: string }) => api<{ ok: boolean }>("/api/admin/ban", { method: "POST", body: JSON.stringify(data) }),
+  adminUnban: (data: { sessionId?: string; ip?: string }) => api<{ ok: boolean }>("/api/admin/unban", { method: "POST", body: JSON.stringify(data) }),
   adminSkip: () => api<{ ok: boolean }>("/api/admin/skip", { method: "POST" }),
   adminPrevious: () => api<{ ok: boolean }>("/api/admin/previous", { method: "POST" }),
   adminStop: () => api<{ ok: boolean }>("/api/admin/stop", { method: "POST" }),

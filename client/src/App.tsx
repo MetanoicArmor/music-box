@@ -45,7 +45,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<PlayerPage state={state} vote={vote} />} />
             <Route path="/queue" element={<QueuePage state={state} vote={vote} />} />
-            <Route path="/history" element={<HistoryPage state={state} />} />
+            <Route path="/history" element={<HistoryPage state={state} refresh={refresh} />} />
             <Route path="/add" element={<AddTrackPage state={state} refresh={refresh} />} />
             <Route path="/admin" element={<AdminPage state={state} refresh={refresh} />} />
           </Routes>

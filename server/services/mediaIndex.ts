@@ -5,7 +5,10 @@ import { getDb } from "../db/index.js";
 import { log } from "../logger.js";
 import { readFileTags } from "./tags.js";
 
-const AUDIO_EXT = new Set([".mp3", ".mp4", ".m4a", ".ogg", ".wav", ".flac", ".webm", ".opus", ".m4b"]);
+const AUDIO_EXT = new Set([
+  ".mp3", ".mp4", ".m4a", ".aac", ".ogg", ".oga", ".wav", ".flac",
+  ".webm", ".opus", ".m4b", ".wma", ".aiff", ".aif", ".ape", ".wv", ".mpga",
+]);
 
 export interface MediaIndexRow {
   file_path: string;
@@ -45,6 +48,21 @@ export function searchMediaIndex(query: string, limit = 8): MediaIndexRow[] {
     .all(q, q, q, q, limit) as MediaIndexRow[];
 }
 
+export function listMediaLibrary(query = "", limit = 200): MediaIndexRow[] {
+  const trimmed = query.trim();
+  if (trimmed.length >= 2) {
+    return searchMediaIndex(trimmed, limit);
+  }
+  return getDb()
+    .prepare(`
+      SELECT file_path, title, artist, album, filename, mtime
+      FROM media_index
+      ORDER BY artist ASC, album ASC, title ASC
+      LIMIT ?
+    `)
+    .all(limit) as MediaIndexRow[];
+}
+
 export async function indexMediaFile(filePath: string, originalName?: string): Promise<MediaIndexRow | null> {
   if (!fs.existsSync(filePath)) return null;
   const stat = fs.statSync(filePath);
@@ -61,36 +79,111 @@ export async function indexMediaFile(filePath: string, originalName?: string): P
   return row;
 }
 
+function collectAudioFiles(dir: string): string[] {
+  const out: string[] = [];
+  const seenDirs = new Set<string>();
+
+  const walk = (current: string) => {
+    let real: string;
+    try {
+      real = fs.realpathSync(current);
+    } catch {
+      real = path.resolve(current);
+    }
+    if (seenDirs.has(real)) return;
+    seenDirs.add(real);
+
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(current, { withFileTypes: true });
+    } catch (err) {
+      log.warn("[media] cannot read", current, err instanceof Error ? err.message : err);
+      return;
+    }
+
+    for (const entry of entries) {
+      if (entry.name.startsWith(".")) continue;
+      const full = path.join(current, entry.name);
+      let isDir = entry.isDirectory();
+      let isFile = entry.isFile();
+      if (entry.isSymbolicLink() || (!isDir && !isFile)) {
+        try {
+          const st = fs.statSync(full);
+          isDir = st.isDirectory();
+          isFile = st.isFile();
+        } catch {
+          continue;
+        }
+      }
+      if (isDir) {
+        walk(full);
+      } else if (isFile && AUDIO_EXT.has(path.extname(entry.name).toLowerCase())) {
+        out.push(full);
+      }
+    }
+  };
+
+  walk(dir);
+  return out;
+}
+
 export async function scanMediaLibrary(): Promise<void> {
-  if (!fs.existsSync(PATHS.media)) return;
+  if (!fs.existsSync(PATHS.media)) {
+    log.warn(`[media] folder missing: ${PATHS.media}`);
+    return;
+  }
 
-  const files = fs.readdirSync(PATHS.media)
-    .map((name) => path.join(PATHS.media, name))
-    .filter((p) => AUDIO_EXT.has(path.extname(p).toLowerCase()) && fs.statSync(p).isFile());
-
-  const existing = new Map(
-    (getDb().prepare("SELECT file_path, mtime FROM media_index").all() as { file_path: string; mtime: number }[])
-      .map((r) => [path.resolve(r.file_path), r.mtime]),
-  );
+  const files = collectAudioFiles(PATHS.media);
+  const existingRows = getDb().prepare("SELECT file_path, mtime FROM media_index").all() as { file_path: string; mtime: number }[];
+  const existing = new Map(existingRows.map((r) => [path.resolve(r.file_path), r]));
 
   const keep = new Set<string>();
-  let indexed = 0;
+  let updated = 0;
+  let unchanged = 0;
+  let failed = 0;
 
   for (const file of files) {
     const resolved = path.resolve(file);
     keep.add(resolved);
-    const mtime = fs.statSync(file).mtimeMs;
+    let mtime: number;
+    try {
+      mtime = fs.statSync(file).mtimeMs;
+    } catch (err) {
+      failed++;
+      log.warn("[media] stat failed", file, err instanceof Error ? err.message : err);
+      continue;
+    }
     const prev = existing.get(resolved);
-    if (prev != null && Math.abs(prev - mtime) < 1) continue;
-    await indexMediaFile(file);
-    indexed++;
+    if (prev != null && Math.abs(prev.mtime - mtime) < 1) {
+      unchanged++;
+      continue;
+    }
+    try {
+      await indexMediaFile(file);
+      updated++;
+    } catch (err) {
+      failed++;
+      log.warn("[media] index failed", file, err instanceof Error ? err.message : err);
+    }
   }
 
-  const stale = [...existing.keys()].filter((p) => !keep.has(p));
+  const stale = [...existing.entries()].filter(([resolved]) => !keep.has(resolved));
   if (stale.length > 0) {
     const del = getDb().prepare("DELETE FROM media_index WHERE file_path = ?");
-    for (const p of stale) del.run(p);
+    for (const [, row] of stale) {
+      del.run(row.file_path);
+      const resolved = path.resolve(row.file_path);
+      if (resolved !== row.file_path) del.run(resolved);
+    }
   }
 
-  log.info(`[media] indexed ${indexed} files, library size ${keep.size}`);
+  log.info(`[media] scan ${PATHS.media}`);
+  log.info(`[media] indexed ${keep.size} local files for search (${updated} new/updated, ${unchanged} unchanged)`);
+  if (failed > 0) {
+    log.warn(`[media] ${failed} files failed to index`);
+  }
+  if (keep.size === 0) {
+    log.warn("[media] no audio files found — put mp3/m4a/flac/wav in media/ (subfolders are scanned)");
+  }
 }
+

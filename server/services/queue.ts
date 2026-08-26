@@ -1,3 +1,4 @@
+import fs from "fs";
 import { v4 as uuidv4 } from "uuid";
 import { getDb, TrackRow, DownloadStatus } from "../db/index.js";
 import type { AppConfig } from "../config.js";
@@ -91,7 +92,7 @@ export function addTrack(input: TrackInput): TrackRow {
     input.filePath ?? null,
     input.sessionId,
     now,
-    input.source === "local" ? "ready" : "pending",
+    input.filePath ? "ready" : input.source === "local" ? "ready" : "pending",
   );
 
   return db.prepare("SELECT * FROM tracks WHERE id = ?").get(id) as TrackRow;
@@ -117,6 +118,48 @@ export function getPlayedTracks(limit = 50): TrackRow[] {
       LIMIT ?
     `)
     .all(limit) as TrackRow[];
+}
+
+export function searchPlayedTracks(query: string, limit = 40): TrackRow[] {
+  const q = `%${query.trim()}%`;
+  if (query.trim().length < 2) return getPlayedTracks(limit);
+  return getDb()
+    .prepare(`
+      SELECT t.* FROM tracks t
+      LEFT JOIN media_index m ON m.file_path = t.file_path
+      WHERE t.status = 'played' AND (
+        t.title LIKE ? OR t.artist LIKE ?
+        OR IFNULL(m.title, '') LIKE ? OR IFNULL(m.artist, '') LIKE ?
+        OR IFNULL(m.album, '') LIKE ? OR IFNULL(m.filename, '') LIKE ?
+      )
+      ORDER BY COALESCE(t.played_at, t.created_at) DESC
+      LIMIT ?
+    `)
+    .all(q, q, q, q, q, q, limit) as TrackRow[];
+}
+
+export function readdPlayedTrack(trackId: string, sessionId: string): TrackRow {
+  const src = getTrackById(trackId);
+  if (!src) {
+    throw Object.assign(new Error("Track not found"), { statusCode: 404 });
+  }
+  if (src.status === "removed") {
+    throw Object.assign(new Error("Track removed"), { statusCode: 400 });
+  }
+
+  const filePath = src.file_path && fs.existsSync(src.file_path) ? src.file_path : null;
+  if (src.source === "local" && !filePath) {
+    throw Object.assign(new Error("File missing"), { statusCode: 400 });
+  }
+
+  return addTrack({
+    title: src.title,
+    artist: src.artist,
+    source: src.source,
+    sourceRef: src.source_ref ?? undefined,
+    filePath: filePath ?? undefined,
+    sessionId,
+  });
 }
 
 export function getTrackById(id: string): TrackRow | null {
@@ -172,6 +215,17 @@ export function clearQueue(): number {
     removeTrack(t.id, "queue_cleared");
   }
   return tracks.length;
+}
+
+/** Fresh party session: nothing playing, empty queue. History stays for re-add. */
+export function resetToEmptySession(): { clearedQueue: number; stoppedPlaying: boolean } {
+  const db = getDb();
+  const playing = db.prepare("SELECT id FROM tracks WHERE status = 'playing' LIMIT 1").get() as { id: string } | undefined;
+  if (playing) {
+    db.prepare("UPDATE tracks SET status = 'played', played_at = ? WHERE id = ?").run(Date.now(), playing.id);
+  }
+  const clearedQueue = clearQueue();
+  return { clearedQueue, stoppedPlaying: Boolean(playing) };
 }
 
 export function setTrackPlaying(trackId: string): void {
@@ -282,6 +336,14 @@ export function getSessionColor(sessionId: string | null): string | null {
   return row?.color ?? null;
 }
 
+export function enrichTrack(t: TrackRow) {
+  return {
+    ...t,
+    sessionColor: getSessionColor(t.added_by_session),
+    addedByIp: getSessionIp(t.added_by_session),
+  };
+}
+
 export interface AppState {
   current: (TrackRow & { sessionColor: string | null; addedByIp: string | null }) | null;
   queue: (TrackRow & { sessionColor: string | null; addedByIp: string | null })[];
@@ -295,16 +357,10 @@ export function buildState(eventMode: boolean): AppState {
   const queue = getQueuedTracks();
   const history = getPlayedTracks(50);
 
-  const enrich = (t: TrackRow) => ({
-    ...t,
-    sessionColor: getSessionColor(t.added_by_session),
-    addedByIp: getSessionIp(t.added_by_session),
-  });
-
   return {
-    current: current ? enrich(current) : null,
-    queue: queue.map(enrich),
-    history: history.map(enrich),
+    current: current ? enrichTrack(current) : null,
+    queue: queue.map(enrichTrack),
+    history: history.map(enrichTrack),
     activeUsers: getActiveUserCount(),
     eventMode,
   };
@@ -322,6 +378,14 @@ export function banSession(sessionId: string): void {
 
 export function banIp(ip: string): void {
   getDb().prepare("UPDATE sessions SET banned = 1 WHERE ip = ?").run(ip);
+}
+
+export function unbanSession(sessionId: string): void {
+  getDb().prepare("UPDATE sessions SET banned = 0 WHERE id = ?").run(sessionId);
+}
+
+export function unbanIp(ip: string): void {
+  getDb().prepare("UPDATE sessions SET banned = 0 WHERE ip = ?").run(ip);
 }
 
 const MAX_ADMIN_LOG_ENTRIES = 500;
