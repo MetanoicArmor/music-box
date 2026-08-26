@@ -1,0 +1,9 @@
+{
+  "port": 3000,
+  "adminPassword": "changeme",
+  "kickThreshold": -2,
+  "voteRateLimit": 10,
+  "voteRateWindowSec": 30,
+  "maxUploadMb": 100,
+  "eventMode": false
+}
