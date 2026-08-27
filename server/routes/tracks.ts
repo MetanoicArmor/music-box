@@ -27,6 +27,7 @@ import { player } from "../services/player.js";
 import { kickDownloads } from "../services/downloader.js";
 import { readFileTags } from "../services/tags.js";
 import { indexMediaFile, listMediaLibrary, searchMediaIndex } from "../services/mediaIndex.js";
+import { isAudioExt, uniqueMediaPath } from "../services/mediaNames.js";
 
 const SESSION_COOKIE = "mb_session";
 
@@ -319,23 +320,29 @@ export async function registerTrackRoutes(app: FastifyInstance, config: AppConfi
     }
 
     const ext = path.extname(data.filename).toLowerCase();
-    if (![".mp3", ".mp4", ".m4a", ".ogg", ".wav", ".flac"].includes(ext)) {
+    if (!isAudioExt(ext)) {
       return reply.status(400).send({ error: "Unsupported file type" });
     }
 
-    const id = uuidv4();
-    const filename = `${id}${ext}`;
-    const dest = path.join(PATHS.media, filename);
-    await pipeline(data.file, fs.createWriteStream(dest));
+    const tmp = path.join(PATHS.media, `.upload-${uuidv4()}${ext}`);
+    try {
+      await pipeline(data.file, fs.createWriteStream(tmp));
+      const tags = await readFileTags(tmp, data.filename);
+      const dest = uniqueMediaPath(tags.artist, tags.title, ext);
+      fs.renameSync(tmp, dest);
+      await indexMediaFile(dest);
 
-    const tags = await readFileTags(dest, data.filename);
-    await indexMediaFile(dest, data.filename);
-
-    return {
-      title: tags.title,
-      artist: tags.artist,
-      filePath: dest,
-    };
+      return {
+        title: tags.title,
+        artist: tags.artist,
+        filePath: dest,
+      };
+    } catch (err) {
+      if (fs.existsSync(tmp)) {
+        try { fs.unlinkSync(tmp); } catch { /* ignore */ }
+      }
+      throw err;
+    }
   });
 
   app.get("/api/stream/:id", async (request, reply) => {

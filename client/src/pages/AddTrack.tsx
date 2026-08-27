@@ -360,14 +360,14 @@ export default function AddTrackPage({ state, refresh }: Props) {
         <input
           ref={fileRef}
           type="file"
-          accept=".mp3,.mp4,.m4a,.ogg,.wav,.flac"
+          accept=".mp3,.mp4,.m4a,.aac,.ogg,.oga,.wav,.flac,.webm,.opus,.m4b,.wma,.aiff,.aif,.ape,.wv,.mpga"
           onChange={(e) => {
             const file = e.target.files?.[0];
             if (file) handleFile(file);
           }}
         />
         <p className="file-upload-title">Загрузить файл</p>
-        <p className="file-upload-hint">mp3, mp4, m4a, ogg, wav, flac</p>
+        <p className="file-upload-hint">mp3, m4a, flac, wav, ogg и другие аудио</p>
       </div>
     </div>
   );

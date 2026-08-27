@@ -4,11 +4,7 @@ import { PATHS } from "../config.js";
 import { getDb, foldSearch } from "../db/index.js";
 import { log } from "../logger.js";
 import { readFileTags } from "./tags.js";
-
-const AUDIO_EXT = new Set([
-  ".mp3", ".mp4", ".m4a", ".aac", ".ogg", ".oga", ".wav", ".flac",
-  ".webm", ".opus", ".m4b", ".wma", ".aiff", ".aif", ".ape", ".wv", ".mpga",
-]);
+import { AUDIO_EXT } from "./mediaNames.js";
 
 export interface MediaIndexRow {
   file_path: string;

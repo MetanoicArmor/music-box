@@ -14,6 +14,7 @@ import { player } from "./player.js";
 import { searchYouTube } from "./resolver.js";
 import { indexMediaFile } from "./mediaIndex.js";
 import { readFileTags } from "./tags.js";
+import { findOutputFile, safeMediaName, uniqueMediaStem } from "./mediaNames.js";
 
 const DOWNLOAD_TIMEOUT_MS = 3 * 60 * 1000;
 const MAX_ATTEMPTS = 3;
@@ -77,34 +78,6 @@ async function resolveDownloadUrl(track: TrackRow): Promise<string> {
     return yt.sourceRef;
   }
   throw new Error(`Cannot download source: ${track.source}`);
-}
-
-function safeMediaName(artist: string, title: string): string {
-  const raw = `${artist} - ${title}`.trim() || "track";
-  let name = raw.replace(/[\\/:*?"<>|]/g, " ").replace(/\s+/g, " ").trim();
-  name = name.replace(/[. ]+$/g, "");
-  if (name.length > 80) name = name.slice(0, 80).trim().replace(/[. ]+$/g, "");
-  return name || "track";
-}
-
-function uniqueMediaStem(stem: string): string {
-  const exts = [".m4a", ".webm", ".opus", ".mp3", ".ogg", ".m4b"];
-  const taken = (name: string) => exts.some((ext) => fs.existsSync(path.join(PATHS.media, name + ext)));
-  if (!taken(stem)) return stem;
-  for (let n = 2; n < 1000; n++) {
-    const candidate = `${stem} (${n})`;
-    if (!taken(candidate)) return candidate;
-  }
-  return `${stem} (${Date.now()})`;
-}
-
-function findOutputFile(stem: string): string | null {
-  const exts = [".m4a", ".webm", ".opus", ".mp3", ".ogg", ".m4b"];
-  for (const ext of exts) {
-    const p = path.join(PATHS.media, `${stem}${ext}`);
-    if (fs.existsSync(p) && fs.statSync(p).size > 0) return p;
-  }
-  return null;
 }
 
 async function downloadOnce(track: TrackRow): Promise<string> {
