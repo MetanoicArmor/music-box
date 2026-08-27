@@ -12,6 +12,7 @@ export interface Track {
   played_at: number | null;
   download_status?: "pending" | "downloading" | "ready" | "failed";
   download_error?: string | null;
+  duration_sec?: number | null;
   sessionColor: string | null;
   addedByIp?: string | null;
 }
@@ -22,6 +23,7 @@ export interface SearchSuggestion {
   source: "local" | "youtube" | "spotify";
   sourceRef: string;
   thumbnail?: string | null;
+  duration_sec?: number | null;
 }
 
 export interface SearchResults {
@@ -36,6 +38,7 @@ export interface LibraryTrack {
   source: "local";
   sourceRef: string;
   filename: string;
+  duration_sec?: number | null;
 }
 
 export interface AppState {

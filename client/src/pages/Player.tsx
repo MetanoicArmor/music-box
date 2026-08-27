@@ -1,5 +1,6 @@
 import { CSSProperties } from "react";
 import { AppState } from "../api";
+import { formatDuration } from "../format";
 
 interface Props {
   state: AppState;
@@ -26,6 +27,7 @@ export default function PlayerPage({ state, vote }: Props) {
   }
 
   const myVote = userVotes[current.id];
+  const duration = formatDuration(current.duration_sec);
 
   return (
     <div>
@@ -36,6 +38,7 @@ export default function PlayerPage({ state, vote }: Props) {
         </div>
         <div className="title">{current.title}</div>
         <div className="artist">{current.artist}</div>
+        {duration && <div className="now-duration">{duration}</div>}
         <div className="vote-score">
           {current.vote_score > 0 ? "+" : ""}
           {current.vote_score}

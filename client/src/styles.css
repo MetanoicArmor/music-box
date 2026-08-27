@@ -304,8 +304,15 @@ a {
   font-size: 1.0625rem;
   font-weight: 400;
   letter-spacing: -0.01em;
-  margin-bottom: 20px;
+  margin-bottom: 8px;
   padding: 0 8px;
+}
+
+.now-duration {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  margin-bottom: 20px;
+  font-variant-numeric: tabular-nums;
 }
 
 .vote-score {
@@ -450,6 +457,13 @@ a {
   margin-top: 2px;
 }
 
+.track-duration {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  margin-top: 2px;
+}
+
 .track-votes {
   display: flex;
   align-items: center;
@@ -507,6 +521,14 @@ a {
   width: auto;
   padding: 8px 12px;
   font-size: 0.75rem;
+}
+
+.history-readd.is-added,
+.history-readd.is-added:disabled {
+  background: rgba(48, 209, 88, 0.18);
+  color: var(--up);
+  box-shadow: inset 0 0 0 1px rgba(48, 209, 88, 0.35);
+  opacity: 1;
 }
 
 /* ── Empty states ── */

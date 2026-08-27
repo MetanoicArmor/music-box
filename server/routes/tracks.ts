@@ -20,6 +20,7 @@ import {
   searchPlayedTracks,
   readdPlayedTrack,
   enrichTrack,
+  countDownvotes,
 } from "../services/queue.js";
 import { resolveInput, isOnline, searchYouTubeMany, detectSource } from "../services/resolver.js";
 import { player } from "../services/player.js";
@@ -221,6 +222,7 @@ export async function registerTrackRoutes(app: FastifyInstance, config: AppConfi
       source: "local" as const,
       sourceRef: row.file_path,
       filename: row.filename,
+      duration_sec: row.duration_sec,
     }));
     return { tracks, total: tracks.length };
   });
@@ -242,6 +244,7 @@ export async function registerTrackRoutes(app: FastifyInstance, config: AppConfi
         source: t.source,
         sourceRef: (t.source === "local" ? t.file_path : t.source_ref) as string,
         thumbnail: null as string | null,
+        duration_sec: t.duration_sec,
       }));
 
     const localFromFiles = searchMediaIndex(q, 8).map((row) => ({
@@ -250,6 +253,7 @@ export async function registerTrackRoutes(app: FastifyInstance, config: AppConfi
       source: "local" as const,
       sourceRef: row.file_path,
       thumbnail: null as string | null,
+      duration_sec: row.duration_sec,
     }));
 
     const seen = new Set<string>();
@@ -290,7 +294,13 @@ export async function registerTrackRoutes(app: FastifyInstance, config: AppConfi
     const body = request.body as { direction?: string };
     const direction = body.direction === "down" ? -1 : 1;
 
+    const before = getTrackById(id);
+    const downBefore = before?.status === "playing" ? countDownvotes(id) : 0;
     const result = voteTrack(id, sessionId, direction as 1 | -1, config);
+    const downAfter = countDownvotes(id);
+    if (before?.status === "playing" && downAfter >= config.playingKickDislikes && downAfter > downBefore) {
+      await player.skip();
+    }
     notifyStateChange(config.eventMode);
     return { track: result };
   });

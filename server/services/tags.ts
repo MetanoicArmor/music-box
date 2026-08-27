@@ -7,6 +7,7 @@ export interface FileTags {
   artist: string;
   album: string;
   filename: string;
+  durationSec: number | null;
 }
 
 function firstString(value: unknown): string {
@@ -23,13 +24,17 @@ export async function readFileTags(filePath: string, originalName?: string): Pro
   let title = "";
   let artist = "";
   let album = "";
+  let durationSec: number | null = null;
 
   try {
-    const meta = await parseFile(filePath, { duration: false, skipCovers: true });
+    const meta = await parseFile(filePath, { duration: true, skipCovers: true });
     const common = meta.common;
     title = firstString(common.title);
     artist = firstString(common.artist) || firstString(common.albumartist) || (common.artists ?? []).filter(Boolean).join(", ");
     album = firstString(common.album);
+    if (typeof meta.format.duration === "number" && meta.format.duration > 0) {
+      durationSec = Math.round(meta.format.duration);
+    }
   } catch (err) {
     log.warn("[tags] failed to read", filePath, err instanceof Error ? err.message : err);
   }
@@ -39,5 +44,6 @@ export async function readFileTags(filePath: string, originalName?: string): Pro
     artist: artist || "Unknown",
     album,
     filename,
+    durationSec,
   };
 }

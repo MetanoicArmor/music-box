@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { PATHS } from "../config.js";
-import { getDb } from "../db/index.js";
+import { getDb, foldSearch } from "../db/index.js";
 import { log } from "../logger.js";
 import { readFileTags } from "./tags.js";
 
@@ -17,31 +17,33 @@ export interface MediaIndexRow {
   album: string;
   filename: string;
   mtime: number;
+  duration_sec: number | null;
 }
 
 export function upsertMediaIndex(row: MediaIndexRow): void {
   getDb()
     .prepare(`
-      INSERT INTO media_index (file_path, title, artist, album, filename, mtime)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO media_index (file_path, title, artist, album, filename, mtime, duration_sec)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(file_path) DO UPDATE SET
         title = excluded.title,
         artist = excluded.artist,
         album = excluded.album,
         filename = excluded.filename,
-        mtime = excluded.mtime
+        mtime = excluded.mtime,
+        duration_sec = excluded.duration_sec
     `)
-    .run(row.file_path, row.title, row.artist, row.album, row.filename, row.mtime);
+    .run(row.file_path, row.title, row.artist, row.album, row.filename, row.mtime, row.duration_sec);
 }
 
 export function searchMediaIndex(query: string, limit = 8): MediaIndexRow[] {
-  const q = `%${query.trim()}%`;
+  const q = `%${foldSearch(query.trim())}%`;
   if (query.trim().length < 2) return [];
   return getDb()
     .prepare(`
-      SELECT file_path, title, artist, album, filename, mtime
+      SELECT file_path, title, artist, album, filename, mtime, duration_sec
       FROM media_index
-      WHERE title LIKE ? OR artist LIKE ? OR album LIKE ? OR filename LIKE ?
+      WHERE fold(title) LIKE ? OR fold(artist) LIKE ? OR fold(album) LIKE ? OR fold(filename) LIKE ?
       ORDER BY mtime DESC
       LIMIT ?
     `)
@@ -55,7 +57,7 @@ export function listMediaLibrary(query = "", limit = 200): MediaIndexRow[] {
   }
   return getDb()
     .prepare(`
-      SELECT file_path, title, artist, album, filename, mtime
+      SELECT file_path, title, artist, album, filename, mtime, duration_sec
       FROM media_index
       ORDER BY artist ASC, album ASC, title ASC
       LIMIT ?
@@ -74,6 +76,7 @@ export async function indexMediaFile(filePath: string, originalName?: string): P
     album: tags.album,
     filename: originalName ? path.basename(originalName, path.extname(originalName)) : tags.filename,
     mtime: stat.mtimeMs,
+    duration_sec: tags.durationSec,
   };
   upsertMediaIndex(row);
   return row;
@@ -134,7 +137,11 @@ export async function scanMediaLibrary(): Promise<void> {
   }
 
   const files = collectAudioFiles(PATHS.media);
-  const existingRows = getDb().prepare("SELECT file_path, mtime FROM media_index").all() as { file_path: string; mtime: number }[];
+  const existingRows = getDb().prepare("SELECT file_path, mtime, duration_sec FROM media_index").all() as {
+    file_path: string;
+    mtime: number;
+    duration_sec: number | null;
+  }[];
   const existing = new Map(existingRows.map((r) => [path.resolve(r.file_path), r]));
 
   const keep = new Set<string>();
@@ -154,7 +161,7 @@ export async function scanMediaLibrary(): Promise<void> {
       continue;
     }
     const prev = existing.get(resolved);
-    if (prev != null && Math.abs(prev.mtime - mtime) < 1) {
+    if (prev != null && Math.abs(prev.mtime - mtime) < 1 && prev.duration_sec != null && prev.duration_sec > 0) {
       unchanged++;
       continue;
     }

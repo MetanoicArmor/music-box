@@ -13,6 +13,7 @@ import {
 import { player } from "./player.js";
 import { searchYouTube } from "./resolver.js";
 import { indexMediaFile } from "./mediaIndex.js";
+import { readFileTags } from "./tags.js";
 
 const DOWNLOAD_TIMEOUT_MS = 3 * 60 * 1000;
 const MAX_ATTEMPTS = 3;
@@ -78,10 +79,29 @@ async function resolveDownloadUrl(track: TrackRow): Promise<string> {
   throw new Error(`Cannot download source: ${track.source}`);
 }
 
-function findOutputFile(id: string): string | null {
+function safeMediaName(artist: string, title: string): string {
+  const raw = `${artist} - ${title}`.trim() || "track";
+  let name = raw.replace(/[\\/:*?"<>|]/g, " ").replace(/\s+/g, " ").trim();
+  name = name.replace(/[. ]+$/g, "");
+  if (name.length > 80) name = name.slice(0, 80).trim().replace(/[. ]+$/g, "");
+  return name || "track";
+}
+
+function uniqueMediaStem(stem: string): string {
+  const exts = [".m4a", ".webm", ".opus", ".mp3", ".ogg", ".m4b"];
+  const taken = (name: string) => exts.some((ext) => fs.existsSync(path.join(PATHS.media, name + ext)));
+  if (!taken(stem)) return stem;
+  for (let n = 2; n < 1000; n++) {
+    const candidate = `${stem} (${n})`;
+    if (!taken(candidate)) return candidate;
+  }
+  return `${stem} (${Date.now()})`;
+}
+
+function findOutputFile(stem: string): string | null {
   const exts = [".m4a", ".webm", ".opus", ".mp3", ".ogg", ".m4b"];
   for (const ext of exts) {
-    const p = path.join(PATHS.media, `${id}${ext}`);
+    const p = path.join(PATHS.media, `${stem}${ext}`);
     if (fs.existsSync(p) && fs.statSync(p).size > 0) return p;
   }
   return null;
@@ -89,7 +109,8 @@ function findOutputFile(id: string): string | null {
 
 async function downloadOnce(track: TrackRow): Promise<string> {
   const url = await resolveDownloadUrl(track);
-  const outTemplate = path.join(PATHS.media, `${track.id}.%(ext)s`);
+  const stem = uniqueMediaStem(safeMediaName(track.artist, track.title));
+  const outTemplate = path.join(PATHS.media, `${stem}.%(ext)s`);
   log.info(`[download] ${track.artist} - ${track.title} <- ${url}`);
 
   await runYtdlp([
@@ -103,7 +124,7 @@ async function downloadOnce(track: TrackRow): Promise<string> {
     url,
   ], DOWNLOAD_TIMEOUT_MS);
 
-  const file = findOutputFile(track.id);
+  const file = findOutputFile(stem);
   if (!file) throw new Error("yt-dlp finished but output file is missing");
   log.info(`[download] ready: ${file}`);
   return file;
@@ -136,8 +157,9 @@ async function processQueue(): Promise<void> {
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         try {
           const filePath = await downloadOnce(latest);
-          setTrackDownload(latest.id, "ready", { filePath, error: null });
-          void indexMediaFile(filePath);
+          const tags = await readFileTags(filePath, path.basename(filePath));
+          setTrackDownload(latest.id, "ready", { filePath, error: null, durationSec: tags.durationSec });
+          void indexMediaFile(filePath, path.basename(filePath));
           notifyStateChange(eventMode);
           await player.startPlaybackIfIdle();
           ok = true;

@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { AppState, Track, apiClient, SearchResults, SearchSuggestion, LibraryTrack } from "../api";
+import { formatDuration } from "../format";
 
 interface Props {
   state: AppState;
@@ -247,7 +248,10 @@ export default function AddTrackPage({ state, refresh }: Props) {
                       <span className="search-item-icon" aria-hidden="true">♪</span>
                       <span className="search-item-body">
                         <span className="search-item-title">{item.title}</span>
-                        <span className="search-item-meta">{item.artist} · {item.source}</span>
+                        <span className="search-item-meta">
+                          {item.artist} · {item.source}
+                          {formatDuration(item.duration_sec) ? ` · ${formatDuration(item.duration_sec)}` : ""}
+                        </span>
                       </span>
                     </button>
                   ))}
@@ -308,6 +312,7 @@ export default function AddTrackPage({ state, refresh }: Props) {
                 {library.map((item) => {
                   const queued = live.some((t) => sameLocalPath(t.file_path, item.sourceRef));
                   const meta = [item.artist, item.album].filter(Boolean).join(" · ") || item.filename;
+                  const duration = formatDuration(item.duration_sec);
                   return (
                     <button
                       key={item.sourceRef}
@@ -319,7 +324,7 @@ export default function AddTrackPage({ state, refresh }: Props) {
                       <span className="search-item-icon" aria-hidden="true">♪</span>
                       <span className="search-item-body">
                         <span className="search-item-title">{item.title}</span>
-                        <span className="search-item-meta">{meta}</span>
+                        <span className="search-item-meta">{duration ? `${meta} · ${duration}` : meta}</span>
                       </span>
                       <span className="search-item-action">
                         {queued ? "В очереди" : addingPath === item.sourceRef ? "…" : "В очередь"}

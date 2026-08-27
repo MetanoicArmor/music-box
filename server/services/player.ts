@@ -12,6 +12,7 @@ import {
   getCurrentTrack,
   notifyStateChange,
   setTrackDownload,
+  setTrackDuration,
 } from "./queue.js";
 import type { TrackRow } from "../db/index.js";
 import { resolveLocalFile } from "./resolver.js";
@@ -373,8 +374,25 @@ export class MpvPlayer {
 
     setTrackPlaying(track.id);
     this.playing = true;
+    void this.captureDuration(track.id);
     notifyStateChange(this.eventMode);
     return true;
+  }
+
+  private async captureDuration(trackId: string): Promise<void> {
+    const existing = getCurrentTrack();
+    if (existing?.id === trackId && existing.duration_sec && existing.duration_sec > 0) return;
+    await this.waitForFileLoaded(2000);
+    if (getCurrentTrack()?.id !== trackId) return;
+    try {
+      const duration = await this.queryProperty("duration");
+      if (typeof duration === "number" && duration > 0) {
+        setTrackDuration(trackId, duration);
+        notifyStateChange(this.eventMode);
+      }
+    } catch {
+      // duration unavailable
+    }
   }
 
   async playNext(): Promise<void> {

@@ -13,6 +13,7 @@ export function getDb(): Database.Database {
     db = new Database(PATHS.db);
     db.pragma("journal_mode = WAL");
     db.pragma("foreign_keys = ON");
+    db.function("fold", { deterministic: true }, (value: unknown) => foldSearch(value));
     const hasTracks = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='tracks'").get();
     if (hasTracks) {
       migrateDb(db);
@@ -27,6 +28,13 @@ export function getDb(): Database.Database {
 
 export type DownloadStatus = "pending" | "downloading" | "ready" | "failed";
 
+export function foldSearch(value: unknown): string {
+  return String(value ?? "")
+    .normalize("NFC")
+    .toLocaleLowerCase("ru")
+    .replace(/ё/g, "е");
+}
+
 function migrateDb(db: Database.Database): void {
   const cols = db.prepare("PRAGMA table_info(tracks)").all() as { name: string }[];
   if (!cols.some((c) => c.name === "played_at")) {
@@ -37,6 +45,9 @@ function migrateDb(db: Database.Database): void {
   }
   if (!cols.some((c) => c.name === "download_error")) {
     db.exec("ALTER TABLE tracks ADD COLUMN download_error TEXT");
+  }
+  if (!cols.some((c) => c.name === "duration_sec")) {
+    db.exec("ALTER TABLE tracks ADD COLUMN duration_sec INTEGER");
   }
   db.exec("UPDATE tracks SET download_status = 'ready' WHERE source = 'local' AND (download_status IS NULL OR download_status = '')");
   db.exec("UPDATE tracks SET download_status = 'pending' WHERE source IN ('youtube', 'spotify') AND file_path IS NULL AND status IN ('queued', 'playing') AND download_status = 'ready'");
@@ -53,6 +64,10 @@ function migrateDb(db: Database.Database): void {
       mtime REAL NOT NULL
     )
   `);
+  const mediaCols = db.prepare("PRAGMA table_info(media_index)").all() as { name: string }[];
+  if (mediaCols.length > 0 && !mediaCols.some((c) => c.name === "duration_sec")) {
+    db.exec("ALTER TABLE media_index ADD COLUMN duration_sec INTEGER");
+  }
   db.exec("CREATE INDEX IF NOT EXISTS idx_media_title ON media_index(title)");
   db.exec("CREATE INDEX IF NOT EXISTS idx_media_artist ON media_index(artist)");
 }
@@ -71,6 +86,7 @@ export interface TrackRow {
   played_at: number | null;
   download_status: DownloadStatus;
   download_error: string | null;
+  duration_sec: number | null;
 }
 
 export interface SessionRow {

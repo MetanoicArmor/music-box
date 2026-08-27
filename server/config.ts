@@ -8,6 +8,7 @@ export interface AppConfig {
   port: number;
   adminPassword: string;
   kickThreshold: number;
+  playingKickDislikes: number;
   voteRateLimit: number;
   voteRateWindowSec: number;
   maxUploadMb: number;
@@ -18,6 +19,7 @@ const DEFAULT_CONFIG: AppConfig = {
   port: 3000,
   adminPassword: "changeme",
   kickThreshold: -2,
+  playingKickDislikes: 3,
   voteRateLimit: 10,
   voteRateWindowSec: 30,
   maxUploadMb: 100,

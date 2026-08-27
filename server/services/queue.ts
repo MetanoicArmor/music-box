@@ -1,6 +1,7 @@
 import fs from "fs";
+import path from "path";
 import { v4 as uuidv4 } from "uuid";
-import { getDb, TrackRow, DownloadStatus } from "../db/index.js";
+import { getDb, TrackRow, DownloadStatus, foldSearch } from "../db/index.js";
 import type { AppConfig } from "../config.js";
 import { broadcast } from "../ws/broadcast.js";
 
@@ -72,6 +73,7 @@ export interface TrackInput {
   sourceRef?: string;
   filePath?: string;
   sessionId: string;
+  durationSec?: number | null;
 }
 
 export function addTrack(input: TrackInput): TrackRow {
@@ -79,10 +81,11 @@ export function addTrack(input: TrackInput): TrackRow {
   const id = uuidv4();
   const now = Date.now();
   const artist = input.artist ?? "Unknown";
+  const durationSec = input.durationSec ?? durationFromMedia(input.filePath);
 
   db.prepare(`
-    INSERT INTO tracks (id, title, artist, source, source_ref, file_path, added_by_session, vote_score, status, created_at, download_status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 1, 'queued', ?, ?)
+    INSERT INTO tracks (id, title, artist, source, source_ref, file_path, added_by_session, vote_score, status, created_at, download_status, duration_sec)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 1, 'queued', ?, ?, ?)
   `).run(
     id,
     input.title,
@@ -93,9 +96,19 @@ export function addTrack(input: TrackInput): TrackRow {
     input.sessionId,
     now,
     input.filePath ? "ready" : input.source === "local" ? "ready" : "pending",
+    durationSec ?? null,
   );
 
   return db.prepare("SELECT * FROM tracks WHERE id = ?").get(id) as TrackRow;
+}
+
+function durationFromMedia(filePath?: string | null): number | null {
+  if (!filePath) return null;
+  const resolved = path.resolve(filePath);
+  const row = getDb()
+    .prepare("SELECT duration_sec FROM media_index WHERE file_path = ? OR file_path = ?")
+    .get(filePath, resolved) as { duration_sec: number | null } | undefined;
+  return row?.duration_sec ?? null;
 }
 
 export function getQueuedTracks(): TrackRow[] {
@@ -121,16 +134,16 @@ export function getPlayedTracks(limit = 50): TrackRow[] {
 }
 
 export function searchPlayedTracks(query: string, limit = 40): TrackRow[] {
-  const q = `%${query.trim()}%`;
+  const q = `%${foldSearch(query.trim())}%`;
   if (query.trim().length < 2) return getPlayedTracks(limit);
   return getDb()
     .prepare(`
       SELECT t.* FROM tracks t
       LEFT JOIN media_index m ON m.file_path = t.file_path
       WHERE t.status = 'played' AND (
-        t.title LIKE ? OR t.artist LIKE ?
-        OR IFNULL(m.title, '') LIKE ? OR IFNULL(m.artist, '') LIKE ?
-        OR IFNULL(m.album, '') LIKE ? OR IFNULL(m.filename, '') LIKE ?
+        fold(t.title) LIKE ? OR fold(t.artist) LIKE ?
+        OR fold(IFNULL(m.title, '')) LIKE ? OR fold(IFNULL(m.artist, '')) LIKE ?
+        OR fold(IFNULL(m.album, '')) LIKE ? OR fold(IFNULL(m.filename, '')) LIKE ?
       )
       ORDER BY COALESCE(t.played_at, t.created_at) DESC
       LIMIT ?
@@ -159,6 +172,7 @@ export function readdPlayedTrack(trackId: string, sessionId: string): TrackRow {
     sourceRef: src.source_ref ?? undefined,
     filePath: filePath ?? undefined,
     sessionId,
+    durationSec: src.duration_sec,
   });
 }
 
@@ -170,7 +184,7 @@ export function getTrackById(id: string): TrackRow | null {
 export function voteTrack(trackId: string, sessionId: string, direction: 1 | -1, config: AppConfig): TrackRow | null {
   const db = getDb();
   const track = getTrackById(trackId);
-  if (!track || track.status !== "queued") return null;
+  if (!track || (track.status !== "queued" && track.status !== "playing")) return null;
 
   const existing = db.prepare("SELECT direction FROM votes WHERE track_id = ? AND session_id = ?").get(trackId, sessionId) as { direction: number } | undefined;
 
@@ -186,7 +200,7 @@ export function voteTrack(trackId: string, sessionId: string, direction: 1 | -1,
 
   const updated = getTrackById(trackId)!;
 
-  if (updated.vote_score <= config.kickThreshold) {
+  if (updated.status === "queued" && updated.vote_score <= config.kickThreshold) {
     removeTrack(trackId, "kicked");
     return null;
   }
@@ -254,11 +268,23 @@ export function getNextTrack(): TrackRow | null {
 export function setTrackDownload(
   id: string,
   status: DownloadStatus,
-  extra?: { filePath?: string | null; error?: string | null },
+  extra?: { filePath?: string | null; error?: string | null; durationSec?: number | null },
 ): void {
   getDb()
-    .prepare("UPDATE tracks SET download_status = ?, file_path = COALESCE(?, file_path), download_error = ? WHERE id = ?")
-    .run(status, extra?.filePath ?? null, extra?.error ?? null, id);
+    .prepare("UPDATE tracks SET download_status = ?, file_path = COALESCE(?, file_path), download_error = ?, duration_sec = COALESCE(?, duration_sec) WHERE id = ?")
+    .run(status, extra?.filePath ?? null, extra?.error ?? null, extra?.durationSec ?? null, id);
+}
+
+export function setTrackDuration(id: string, durationSec: number): void {
+  if (!Number.isFinite(durationSec) || durationSec <= 0) return;
+  getDb().prepare("UPDATE tracks SET duration_sec = ? WHERE id = ? AND (duration_sec IS NULL OR duration_sec = 0)").run(Math.round(durationSec), id);
+}
+
+export function countDownvotes(trackId: string): number {
+  const row = getDb()
+    .prepare("SELECT COUNT(*) as c FROM votes WHERE track_id = ? AND direction = -1")
+    .get(trackId) as { c: number };
+  return row.c;
 }
 
 export function getDownloadQueue(): TrackRow[] {
@@ -277,16 +303,16 @@ export function getDownloadQueue(): TrackRow[] {
 }
 
 export function searchLocalTracks(query: string, limit = 5): TrackRow[] {
-  const q = `%${query.trim()}%`;
+  const q = `%${foldSearch(query.trim())}%`;
   if (query.trim().length < 2) return [];
   return getDb()
     .prepare(`
       SELECT t.* FROM tracks t
       LEFT JOIN media_index m ON m.file_path = t.file_path
       WHERE t.status != 'removed' AND (
-        t.title LIKE ? OR t.artist LIKE ?
-        OR IFNULL(m.title, '') LIKE ? OR IFNULL(m.artist, '') LIKE ?
-        OR IFNULL(m.album, '') LIKE ? OR IFNULL(m.filename, '') LIKE ?
+        fold(t.title) LIKE ? OR fold(t.artist) LIKE ?
+        OR fold(IFNULL(m.title, '')) LIKE ? OR fold(IFNULL(m.artist, '')) LIKE ?
+        OR fold(IFNULL(m.album, '')) LIKE ? OR fold(IFNULL(m.filename, '')) LIKE ?
       )
       ORDER BY t.created_at DESC
       LIMIT ?

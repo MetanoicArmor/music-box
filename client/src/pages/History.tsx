@@ -1,20 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AppState, Track, apiClient } from "../api";
+import { formatDuration, foldSearch } from "../format";
 
 interface Props {
   state: AppState;
   refresh: () => Promise<void>;
 }
 
-function formatPlayedAt(ts: number | null, fallback: number): string {
-  const date = new Date(ts ?? fallback);
-  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
-
 function matchesQuery(track: Track, query: string): boolean {
-  const q = query.trim().toLowerCase();
+  const q = foldSearch(query.trim());
   if (q.length < 2) return true;
-  return track.title.toLowerCase().includes(q) || track.artist.toLowerCase().includes(q);
+  return foldSearch(track.title).includes(q) || foldSearch(track.artist).includes(q);
 }
 
 function sameSource(a: Track, b: Track): boolean {
@@ -133,7 +129,7 @@ export default function HistoryPage({ state, refresh }: Props) {
               </div>
               <div className="history-actions">
                 <div className="history-meta">
-                  <span>{formatPlayedAt(track.played_at, track.created_at)}</span>
+                  <span>{formatDuration(track.duration_sec) || "—"}</span>
                   {track.vote_score !== 0 && (
                     <span className="history-votes">{track.vote_score > 0 ? "+" : ""}{track.vote_score}</span>
                   )}
@@ -141,11 +137,11 @@ export default function HistoryPage({ state, refresh }: Props) {
                 {!eventMode && (
                   <button
                     type="button"
-                    className="btn btn-secondary history-readd"
+                    className={`btn history-readd${queued ? " is-added" : " btn-secondary"}`}
                     disabled={queued || addingId === track.id}
                     onClick={() => handleReadd(track)}
                   >
-                    {queued ? "В очереди" : addingId === track.id ? "Добавляю…" : "В очередь"}
+                    {queued ? "Добавлено" : addingId === track.id ? "Добавляю…" : "В очередь"}
                   </button>
                 )}
               </div>

@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS tracks (
   played_at INTEGER,
   download_status TEXT NOT NULL DEFAULT 'ready' CHECK(download_status IN ('pending', 'downloading', 'ready', 'failed')),
   download_error TEXT,
+  duration_sec INTEGER,
   FOREIGN KEY (added_by_session) REFERENCES sessions(id)
 );
 
@@ -55,7 +56,8 @@ CREATE TABLE IF NOT EXISTS media_index (
   artist TEXT NOT NULL DEFAULT 'Unknown',
   album TEXT NOT NULL DEFAULT '',
   filename TEXT NOT NULL DEFAULT '',
-  mtime REAL NOT NULL
+  mtime REAL NOT NULL,
+  duration_sec INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS idx_media_title ON media_index(title);

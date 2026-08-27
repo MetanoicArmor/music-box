@@ -1,4 +1,5 @@
 import { Track } from "../api";
+import { formatDuration } from "../format";
 
 interface Props {
   track: Track;
@@ -23,6 +24,7 @@ function downloadLabel(track: Track): { text: string; className: string } | null
 
 export default function TrackItem({ track, index, myVote, onVote, admin, onDelete, onDeleteArtist, onBanIp, onUnbanIp }: Props) {
   const badge = downloadLabel(track);
+  const duration = formatDuration(track.duration_sec);
 
   return (
     <div className="track-item">
@@ -33,6 +35,7 @@ export default function TrackItem({ track, index, myVote, onVote, admin, onDelet
         {index !== undefined && <span className="track-index">{index}.</span>}
         <div className="title">{track.title}</div>
         <div className="artist">{track.artist}</div>
+        {duration && <div className="track-duration">{duration}</div>}
         {badge && (
           <span className={badge.className} title={track.download_error ?? undefined}>
             {badge.text}
