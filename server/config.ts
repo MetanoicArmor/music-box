@@ -26,6 +26,13 @@ const DEFAULT_CONFIG: AppConfig = {
   eventMode: false,
 };
 
+function parseJsonConfig(text: string): Record<string, unknown> {
+  const stripped = text
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^\s*\/\/.*$/gm, "");
+  return JSON.parse(stripped) as Record<string, unknown>;
+}
+
 export function loadConfig(): AppConfig {
   const configPath = path.join(ROOT, "config.json");
   const examplePath = path.join(ROOT, "config.example.json");
@@ -38,7 +45,7 @@ export function loadConfig(): AppConfig {
   }
 
   if (fs.existsSync(configPath)) {
-    const raw = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    const raw = parseJsonConfig(fs.readFileSync(configPath, "utf-8"));
     return { ...DEFAULT_CONFIG, ...raw };
   }
 
