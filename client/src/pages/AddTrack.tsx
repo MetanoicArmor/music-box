@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { AppState, Track, apiClient, SearchResults, SearchSuggestion, LibraryTrack } from "../api";
 import { formatDuration } from "../format";
+import { useLocale } from "../i18n/locale";
 
 interface Props {
   state: AppState;
@@ -17,6 +18,7 @@ function sameLocalPath(a: string | null | undefined, b: string): boolean {
 }
 
 export default function AddTrackPage({ state, refresh }: Props) {
+  const { t } = useLocale();
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [searching, setSearching] = useState(false);
@@ -80,8 +82,8 @@ export default function AddTrackPage({ state, refresh }: Props) {
   if (state.eventMode) {
     return (
       <div className="empty">
-        <p>Добавление треков отключено</p>
-        <p className="empty-sub">Event mode — только голосование, добавление отключено</p>
+        <p>{t("add.eventOff")}</p>
+        <p className="empty-sub">{t("add.eventOffSub")}</p>
       </div>
     );
   }
@@ -131,10 +133,10 @@ export default function AddTrackPage({ state, refresh }: Props) {
       await apiClient.addTrack(input.trim());
       setInput("");
       setResults(null);
-      setSuccess("Трек добавлен в очередь и скачивается");
+      setSuccess(t("add.queuedDownloading"));
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Ошибка");
+      setError(err instanceof Error ? err.message : t("add.error"));
     } finally {
       setLoading(false);
     }
@@ -151,13 +153,14 @@ export default function AddTrackPage({ state, refresh }: Props) {
         artist: item.artist,
         source: item.source,
         sourceRef: item.sourceRef,
+        duration_sec: item.duration_sec,
       });
       setInput("");
       setResults(null);
-      setSuccess(`«${item.title}» добавлен в очередь`);
+      setSuccess(t("add.queuedTitle", { title: item.title }));
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Ошибка");
+      setError(err instanceof Error ? err.message : t("add.error"));
     } finally {
       setLoading(false);
     }
@@ -174,13 +177,14 @@ export default function AddTrackPage({ state, refresh }: Props) {
         artist: item.artist,
         source: "local",
         sourceRef: item.sourceRef,
+        duration_sec: item.duration_sec,
       });
       setLibraryQuery("");
-      setSuccess(`«${item.title}» добавлен в очередь`);
+      setSuccess(t("add.queuedTitle", { title: item.title }));
       await refresh();
       await loadLibrary();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Ошибка");
+      setError(err instanceof Error ? err.message : t("add.error"));
     } finally {
       setAddingPath(null);
     }
@@ -197,11 +201,11 @@ export default function AddTrackPage({ state, refresh }: Props) {
         artist: uploaded.artist,
         filePath: uploaded.filePath,
       });
-      setSuccess(`«${uploaded.title}» добавлен!`);
+      setSuccess(t("add.uploadedTitle", { title: uploaded.title }));
       await refresh();
       await loadLibrary(libraryQuery);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Ошибка загрузки");
+      setError(err instanceof Error ? err.message : t("add.uploadError"));
     } finally {
       setLoading(false);
     }
@@ -217,10 +221,10 @@ export default function AddTrackPage({ state, refresh }: Props) {
 
       <form onSubmit={handleSubmit}>
         <div className="form-group search-wrap" ref={wrapRef}>
-          <label>Ссылка или поиск</label>
+          <label>{t("add.linkOrSearch")}</label>
           <input
             type="text"
-            placeholder="YouTube / Spotify URL или название трека"
+            placeholder={t("add.searchPlaceholder")}
             value={input}
             onChange={(e) => {
               setInput(e.target.value);
@@ -232,12 +236,12 @@ export default function AddTrackPage({ state, refresh }: Props) {
             disabled={loading}
             autoComplete="off"
           />
-          {searching && <div className="search-status">Ищу…</div>}
+          {searching && <div className="search-status">{t("add.searching")}</div>}
           {showDropdown && (
             <div className="search-dropdown">
               {results!.local.length > 0 && (
                 <div className="search-group">
-                  <div className="search-group-title">Локально</div>
+                  <div className="search-group-title">{t("add.local")}</div>
                   {results!.local.map((item, i) => (
                     <button
                       key={`l-${i}`}
@@ -259,7 +263,7 @@ export default function AddTrackPage({ state, refresh }: Props) {
               )}
               {results!.youtube.length > 0 && (
                 <div className="search-group">
-                  <div className="search-group-title">YouTube</div>
+                  <div className="search-group-title">{t("add.youtube")}</div>
                   {results!.youtube.map((item, i) => (
                     <button
                       key={`y-${i}`}
@@ -277,23 +281,23 @@ export default function AddTrackPage({ state, refresh }: Props) {
                 </div>
               )}
               {!searching && results!.local.length === 0 && results!.youtube.length === 0 && (
-                <div className="search-empty">Ничего не найдено</div>
+                <div className="search-empty">{t("add.notFound")}</div>
               )}
             </div>
           )}
         </div>
         <button type="submit" className="btn btn-primary" disabled={loading || !input.trim()}>
-          {loading ? "Добавляю..." : "Добавить в очередь"}
+          {loading ? t("add.adding") : t("add.addToQueue")}
         </button>
       </form>
 
-      <div className="divider">или</div>
+      <div className="divider">{t("add.or")}</div>
 
       <div className="form-group search-wrap" ref={libraryWrapRef}>
-        <label>Локальная библиотека{libraryTotal > 0 ? ` (${libraryTotal})` : ""}</label>
+        <label>{t("add.library")}{libraryTotal > 0 ? ` (${libraryTotal})` : ""}</label>
         <input
           type="text"
-          placeholder="Название или исполнитель из media/"
+            placeholder={t("add.libraryPlaceholder")}
           value={libraryQuery}
           onChange={(e) => runLibrarySearch(e.target.value)}
           onFocus={() => {
@@ -303,12 +307,12 @@ export default function AddTrackPage({ state, refresh }: Props) {
           disabled={loading}
           autoComplete="off"
         />
-        {librarySearching && <div className="search-status">Ищу…</div>}
+        {librarySearching && <div className="search-status">{t("add.searching")}</div>}
         {showLibraryDropdown && (
           <div className="search-dropdown">
             {library.length > 0 && (
               <div className="search-group">
-                <div className="search-group-title">Локально</div>
+                <div className="search-group-title">{t("add.local")}</div>
                 {library.map((item) => {
                   const queued = live.some((t) => sameLocalPath(t.file_path, item.sourceRef));
                   const meta = [item.artist, item.album].filter(Boolean).join(" · ") || item.filename;
@@ -327,7 +331,7 @@ export default function AddTrackPage({ state, refresh }: Props) {
                         <span className="search-item-meta">{duration ? `${meta} · ${duration}` : meta}</span>
                       </span>
                       <span className="search-item-action">
-                        {queued ? "В очереди" : addingPath === item.sourceRef ? "…" : "В очередь"}
+                        {queued ? t("add.inQueue") : addingPath === item.sourceRef ? "…" : t("add.toQueue")}
                       </span>
                     </button>
                   );
@@ -337,19 +341,18 @@ export default function AddTrackPage({ state, refresh }: Props) {
             {!librarySearching && library.length === 0 && (
               <div className="search-empty">
                 {libraryQuery.trim()
-                  ? "Ничего не найдено"
-                  : "Библиотека пуста — положите аудио в media/"}
+                  ? t("add.notFound")
+                  : t("add.libraryEmpty")}
               </div>
             )}
           </div>
         )}
       </div>
 
-      <div className="divider">или</div>
+      <div className="divider">{t("add.or")}</div>
 
       <div
         className="file-upload"
-        onClick={() => fileRef.current?.click()}
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => {
           e.preventDefault();
@@ -360,14 +363,14 @@ export default function AddTrackPage({ state, refresh }: Props) {
         <input
           ref={fileRef}
           type="file"
-          accept=".mp3,.mp4,.m4a,.aac,.ogg,.oga,.wav,.flac,.webm,.opus,.m4b,.wma,.aiff,.aif,.ape,.wv,.mpga"
+          accept="audio/*,video/mp4,video/webm,.mp3,.mp4,.m4a,.aac,.ogg,.oga,.wav,.flac,.webm,.opus,.m4b,.wma,.aiff,.aif,.ape,.wv,.mpga"
           onChange={(e) => {
             const file = e.target.files?.[0];
             if (file) handleFile(file);
           }}
         />
-        <p className="file-upload-title">Загрузить файл</p>
-        <p className="file-upload-hint">mp3, m4a, flac, wav, ogg и другие аудио</p>
+        <p className="file-upload-title">{t("add.upload")}</p>
+        <p className="file-upload-hint">{t("add.uploadHint")}</p>
       </div>
     </div>
   );

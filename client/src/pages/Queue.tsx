@@ -1,5 +1,6 @@
 import { AppState } from "../api";
 import TrackItem from "../components/TrackItem";
+import { useLocale } from "../i18n/locale";
 
 interface Props {
   state: AppState;
@@ -8,9 +9,10 @@ interface Props {
 
 export default function QueuePage({ state, vote }: Props) {
   const { queue, userVotes } = state;
+  const { t } = useLocale();
 
   if (queue.length === 0) {
-    return <div className="empty">Очередь пуста</div>;
+    return <div className="empty">{t("queue.empty")}</div>;
   }
 
   return (

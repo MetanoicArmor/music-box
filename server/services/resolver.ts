@@ -60,6 +60,7 @@ export interface ResolvedTrack {
   sourceRef: string;
   filePath?: string;
   thumbnail?: string | null;
+  durationSec?: number | null;
 }
 
 export interface SearchSuggestion {
@@ -79,6 +80,7 @@ export async function resolveYouTubeUrl(url: string): Promise<ResolvedTrack> {
     source: "youtube",
     sourceRef: data.webpage_url ?? url,
     thumbnail: data.thumbnail ?? data.thumbnails?.[0]?.url ?? null,
+    durationSec: typeof data.duration === "number" && data.duration > 0 ? Math.round(data.duration) : null,
   };
 }
 
@@ -112,6 +114,7 @@ export async function searchYouTubeMany(query: string, limit = 5): Promise<Resol
         source: "youtube",
         sourceRef: url,
         thumbnail: data.thumbnail ?? data.thumbnails?.[0]?.url ?? null,
+        durationSec: typeof data.duration === "number" && data.duration > 0 ? Math.round(data.duration) : null,
       });
     } catch {
       // skip malformed json line

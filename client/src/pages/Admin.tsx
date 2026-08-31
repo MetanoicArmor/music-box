@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { AppState, apiClient, AdminLogEntry } from "../api";
 import TrackItem from "../components/TrackItem";
 import HelpTip from "../components/HelpTip";
+import { useLocale } from "../i18n/locale";
 
 interface Props {
   state: AppState;
@@ -10,6 +11,7 @@ interface Props {
 
 function QrCode({ url }: { url: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { t } = useLocale();
 
   useEffect(() => {
     if (!canvasRef.current || !url) return;
@@ -23,12 +25,11 @@ function QrCode({ url }: { url: string }) {
 
   return (
     <div className="qr-section">
-      <p className="qr-title">Подключиться к Music Box</p>
+      <p className="qr-title">{t("admin.qrTitle")}</p>
       <canvas ref={canvasRef} width={256} height={256} />
       <p className="qr-url">{url}</p>
       <p className="qr-hint">
-        Телефон и ПК — в одной Wi‑Fi. После сканирования подтвердите сертификат:
-        «Дополнительно» → «Перейти на сайт».
+        {t("admin.qrHint")}
       </p>
     </div>
   );
@@ -89,6 +90,7 @@ interface AdminPlayerProps {
 }
 
 function AdminPlayer({ refresh, hasCurrent, hasQueue, hasHistory }: AdminPlayerProps) {
+  const { t } = useLocale();
   const [playback, setPlayback] = useState<{ time: number; duration: number; paused: boolean } | null>(null);
   const [currentTrack, setCurrentTrack] = useState<{ artist: string; title: string } | null>(null);
   const [playerError, setPlayerError] = useState("");
@@ -123,7 +125,7 @@ function AdminPlayer({ refresh, hasCurrent, hasQueue, hasHistory }: AdminPlayerP
       await pollPlayback();
       if (alsoRefresh) await refresh();
     } catch (err) {
-      setPlayerError(err instanceof Error ? err.message : "Ошибка плеера");
+      setPlayerError(err instanceof Error ? err.message : t("admin.playerError"));
     }
   };
 
@@ -138,14 +140,14 @@ function AdminPlayer({ refresh, hasCurrent, hasQueue, hasHistory }: AdminPlayerP
     <div className="admin-player">
       {currentTrack ? (
         <div className="admin-player-now">
-          <div className="admin-player-label">Сейчас играет</div>
+          <div className="admin-player-label">{t("admin.nowPlaying")}</div>
           <div className="admin-player-title">{currentTrack.title}</div>
           <div className="admin-player-artist">{currentTrack.artist}</div>
         </div>
       ) : (
         <div className="admin-player-now">
-          <div className="admin-player-label">Плеер</div>
-          <div className="admin-player-idle">Ничего не играет</div>
+          <div className="admin-player-label">{t("admin.player")}</div>
+          <div className="admin-player-idle">{t("admin.idle")}</div>
         </div>
       )}
 
@@ -170,8 +172,8 @@ function AdminPlayer({ refresh, hasCurrent, hasQueue, hasHistory }: AdminPlayerP
           type="button"
           className="player-btn"
           disabled={!hasHistory}
-          aria-label="Предыдущий трек"
-          title="Предыдущий"
+          aria-label={t("admin.prevTrack")}
+          title={t("admin.prev")}
           onClick={() => runPlayerAction(() => apiClient.adminPrevious(), true)}
         >
           <IconPrev />
@@ -181,8 +183,8 @@ function AdminPlayer({ refresh, hasCurrent, hasQueue, hasHistory }: AdminPlayerP
           type="button"
           className="player-btn player-btn--main"
           disabled={!canTransport}
-          aria-label={isPaused ? "Играть" : "Пауза"}
-          title={isPaused ? "Играть" : "Пауза"}
+          aria-label={isPaused ? t("admin.play") : t("admin.pause")}
+          title={isPaused ? t("admin.play") : t("admin.pause")}
           onClick={() =>
             runPlayerAction(() => (isPaused ? apiClient.adminResume() : apiClient.adminPause()))
           }
@@ -194,8 +196,8 @@ function AdminPlayer({ refresh, hasCurrent, hasQueue, hasHistory }: AdminPlayerP
           type="button"
           className="player-btn"
           disabled={!hasCurrent && !hasQueue}
-          aria-label="Следующий трек"
-          title="Следующий"
+          aria-label={t("admin.nextTrack")}
+          title={t("admin.next")}
           onClick={() => runPlayerAction(() => apiClient.adminSkip(), true)}
         >
           <IconNext />
@@ -205,8 +207,8 @@ function AdminPlayer({ refresh, hasCurrent, hasQueue, hasHistory }: AdminPlayerP
           type="button"
           className="player-btn player-btn--stop"
           disabled={!hasCurrent}
-          aria-label="Стоп"
-          title="Стоп"
+          aria-label={t("admin.stop")}
+          title={t("admin.stop")}
           onClick={() => runPlayerAction(() => apiClient.adminStop(), true)}
         >
           <IconStop />
@@ -217,6 +219,7 @@ function AdminPlayer({ refresh, hasCurrent, hasQueue, hasHistory }: AdminPlayerP
 }
 
 export default function AdminPage({ state, refresh }: Props) {
+  const { t } = useLocale();
   const [isAdmin, setIsAdmin] = useState(false);
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState("");
@@ -247,7 +250,7 @@ export default function AdminPage({ state, refresh }: Props) {
       setIsAdmin(true);
       setPassword("");
     } catch {
-      setLoginError("Неверный пароль");
+      setLoginError(t("admin.wrongPassword"));
     }
   };
 
@@ -263,7 +266,7 @@ export default function AdminPage({ state, refresh }: Props) {
   };
 
   const handleDeleteArtist = async (artist: string) => {
-    if (!confirm(`Удалить все треки «${artist}» из очереди?`)) return;
+    if (!confirm(t("admin.confirmDeleteArtist", { artist }))) return;
     await apiClient.adminDeleteArtist(artist);
     await refresh();
     await loadLog();
@@ -289,16 +292,16 @@ export default function AdminPage({ state, refresh }: Props) {
         {serverUrl && <QrCode url={serverUrl} />}
         <form onSubmit={handleLogin}>
           <div className="form-group">
-            <label>Пароль администратора</label>
+            <label>{t("admin.password")}</label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Пароль из config.json"
+              placeholder={t("admin.passwordPlaceholder")}
             />
           </div>
           {loginError && <div className="error">{loginError}</div>}
-          <button type="submit" className="btn btn-primary">Войти</button>
+          <button type="submit" className="btn btn-primary">{t("admin.login")}</button>
         </form>
       </div>
     );
@@ -322,24 +325,33 @@ export default function AdminPage({ state, refresh }: Props) {
 
       <div className="admin-controls admin-controls--spaced">
         <button className="btn btn-danger" onClick={() => apiClient.adminClearQueue().then(refresh)}>
-          Очистить очередь
+          {t("admin.clearQueue")}
+        </button>
+        <button
+          className="btn btn-danger"
+          onClick={() => {
+            if (!confirm(t("admin.confirmClearHistory"))) return;
+            apiClient.adminClearHistory().then(refresh);
+          }}
+        >
+          {t("admin.clearHistory")}
         </button>
         <div className="admin-event-mode">
           <button
             className="btn btn-secondary"
             onClick={() => apiClient.adminEventMode(!state.eventMode).then(refresh)}
           >
-            Event mode: {state.eventMode ? "ON" : "OFF"}
+            {t("admin.eventMode")}: {state.eventMode ? t("admin.eventOn") : t("admin.eventOff")}
           </button>
-          <HelpTip text="Режим тусовки: гости могут только голосовать за треки в очереди. Добавление песен и загрузка файлов отключены. Включай, когда очередь уже набрана или кто-то спамит запросами." />
+          <HelpTip text={t("admin.eventHelp")} />
         </div>
         <button className="btn btn-secondary" onClick={handleLogout}>
-          Выйти
+          {t("admin.logout")}
         </button>
       </div>
 
       <div className="form-group">
-        <label>Забанить IP</label>
+        <label>{t("admin.banIp")}</label>
         <div className="ban-row">
           <input
             type="text"
@@ -348,15 +360,15 @@ export default function AdminPage({ state, refresh }: Props) {
             onChange={(e) => setBanIp(e.target.value)}
           />
           <button className="btn btn-danger" onClick={handleBan}>
-            Ban
+            {t("track.ban")}
           </button>
           <button className="btn btn-secondary" onClick={handleUnban}>
-            Unban
+            {t("track.unban")}
           </button>
         </div>
       </div>
 
-      <h3 className="section-title">Очередь ({allTracks.length})</h3>
+      <h3 className="section-title">{t("admin.sectionQueue")} ({allTracks.length})</h3>
       <div className="track-list admin-queue-list">
         {allTracks.map((track) => (
           <TrackItem
@@ -375,14 +387,35 @@ export default function AdminPage({ state, refresh }: Props) {
             }}
           />
         ))}
-        {allTracks.length === 0 && <div className="empty">Пусто</div>}
+        {allTracks.length === 0 && <div className="empty">{t("admin.empty")}</div>}
       </div>
 
-      <h3 className="section-title">Журнал</h3>
+      <h3 className="section-title">{t("admin.sectionHistory")} ({state.history.length})</h3>
+      <div className="track-list admin-queue-list">
+        {state.history.map((track) => (
+          <TrackItem
+            key={track.id}
+            track={track}
+            myVote={state.userVotes[track.id]}
+            onVote={async () => {}}
+            admin
+            onDelete={handleDeleteTrack}
+            onBanIp={(ip) => {
+              apiClient.adminBan({ ip }).then(() => loadLog());
+            }}
+            onUnbanIp={(ip) => {
+              apiClient.adminUnban({ ip }).then(() => loadLog());
+            }}
+          />
+        ))}
+        {state.history.length === 0 && <div className="empty">{t("admin.empty")}</div>}
+      </div>
+
+      <h3 className="section-title">{t("admin.sectionLog")}</h3>
       <div className="log-list">
       {log.map((entry, i) => (
         <div key={i} className="log-entry">
-          {new Date(entry.created_at).toLocaleTimeString()} — {entry.action}
+          {new Date(entry.created_at).toLocaleTimeString()} — {t(`admin.log.${entry.action}`)}
           {entry.details && `: ${entry.details}`}
         </div>
       ))}

@@ -61,16 +61,12 @@ if %MPV_OK%==0 (
 )
 
 if "%BUNDLED%"=="0" (
-    if not exist "dist\client\index.html" (
-        echo Building...
-        call npm run build
-        if %ERRORLEVEL% neq 0 (
-            echo [ERROR] Build failed
-            pause
-            exit /b 1
-        )
-    ) else (
-        call npm run build:server >nul 2>&1
+    echo Building...
+    call npm run build
+    if %ERRORLEVEL% neq 0 (
+        echo [ERROR] Build failed
+        pause
+        exit /b 1
     )
 )
 

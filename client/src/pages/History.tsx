@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AppState, Track, apiClient } from "../api";
 import { formatDuration, foldSearch } from "../format";
+import TrackListen from "../components/TrackListen";
+import { useLocale } from "../i18n/locale";
 
 interface Props {
   state: AppState;
@@ -21,6 +23,7 @@ function sameSource(a: Track, b: Track): boolean {
 
 export default function HistoryPage({ state, refresh }: Props) {
   const { history, eventMode } = state;
+  const { t } = useLocale();
   const [query, setQuery] = useState("");
   const [remote, setRemote] = useState<Track[] | null>(null);
   const [searching, setSearching] = useState(false);
@@ -73,10 +76,10 @@ export default function HistoryPage({ state, refresh }: Props) {
     setSuccess("");
     try {
       await apiClient.readdTrack(track.id);
-      setSuccess(`«${track.title}» снова в очереди`);
+      setSuccess(t("history.readded", { title: track.title }));
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Не удалось добавить");
+      setError(err instanceof Error ? err.message : t("history.addFailed"));
     } finally {
       setAddingId(null);
     }
@@ -85,8 +88,8 @@ export default function HistoryPage({ state, refresh }: Props) {
   if (history.length === 0 && query.trim().length < 2) {
     return (
       <div className="empty">
-        <p>История пуста</p>
-        <p className="empty-sub">Здесь появятся уже сыгранные треки</p>
+        <p>{t("history.empty")}</p>
+        <p className="empty-sub">{t("history.emptySub")}</p>
       </div>
     );
   }
@@ -97,21 +100,21 @@ export default function HistoryPage({ state, refresh }: Props) {
       {success && <div className="success">{success}</div>}
 
       <div className="form-group history-search">
-        <label>Поиск по истории</label>
+        <label>{t("history.search")}</label>
         <input
           type="text"
-          placeholder="Название или исполнитель"
+          placeholder={t("history.searchPlaceholder")}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           autoComplete="off"
         />
-        {searching && <div className="search-status">Ищу…</div>}
+        {searching && <div className="search-status">{t("history.searching")}</div>}
       </div>
 
       {tracks.length === 0 && (
         <div className="empty">
-          <p>Ничего не найдено</p>
-          <p className="empty-sub">Попробуйте другое название</p>
+          <p>{t("history.notFound")}</p>
+          <p className="empty-sub">{t("history.notFoundSub")}</p>
         </div>
       )}
 
@@ -123,6 +126,7 @@ export default function HistoryPage({ state, refresh }: Props) {
               {track.sessionColor && (
                 <div className="track-color" style={{ background: track.sessionColor }} />
               )}
+              {track.sessionEmoji && <span className="track-avatar" aria-hidden="true">{track.sessionEmoji}</span>}
               <div className="track-info">
                 <div className="title">{track.title}</div>
                 <div className="artist">{track.artist}</div>
@@ -134,6 +138,7 @@ export default function HistoryPage({ state, refresh }: Props) {
                     <span className="history-votes">{track.vote_score > 0 ? "+" : ""}{track.vote_score}</span>
                   )}
                 </div>
+                <TrackListen track={track} />
                 {!eventMode && (
                   <button
                     type="button"
@@ -141,7 +146,7 @@ export default function HistoryPage({ state, refresh }: Props) {
                     disabled={queued || addingId === track.id}
                     onClick={() => handleReadd(track)}
                   >
-                    {queued ? "Добавлено" : addingId === track.id ? "Добавляю…" : "В очередь"}
+                    {queued ? t("history.added") : addingId === track.id ? t("history.adding") : t("history.toQueue")}
                   </button>
                 )}
               </div>

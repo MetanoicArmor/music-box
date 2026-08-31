@@ -70,6 +70,20 @@ npm run release      # portable ZIP для Windows (release/MusicBox-win64.zip)
 netsh advfirewall firewall add rule name="Music Box" dir=in action=allow protocol=TCP localport=3000
 ```
 
+## Android-хост
+
+Телефон/планшет может быть хостом вместо Windows-ПК: гости по-прежнему открывают тот же веб-UI по Wi‑Fi.
+
+```bash
+npm run build:android
+```
+
+APK: `android/app/build/outputs/apk/release/app-release.apk` (sideload). Нужны JDK 17 и Android SDK (`ANDROID_HOME`).
+
+В приложении: **Старт** → раздайте QR. Музыка играет на динамике/Bluetooth хоста. Без интернета работают только загруженные файлы.
+
+Локальная библиотека на телефоне: **Music/MusicBox** (в проводнике Windows по USB: внутренняя память → `Music` → `MusicBox`). После копирования файлов запустите хост или откройте вкладку «Добавить».
+
 ## Зависимости
 
 - **Node.js 20+** — сервер и UI
@@ -87,6 +101,7 @@ music-box/
 ├── config.json         # настройки
 ├── server/             # Fastify API + WebSocket + mpv
 ├── client/             # React UI
+├── android/            # Kotlin-хост (Ktor + ExoPlayer)
 ├── media/              # загруженные файлы
 ├── data/               # SQLite база
 └── bin/                # mpv.exe, yt-dlp.exe

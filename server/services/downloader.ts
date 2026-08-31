@@ -1,7 +1,7 @@
 import { spawn } from "child_process";
 import fs from "fs";
 import path from "path";
-import { PATHS } from "../config.js";
+import { PATHS, loadConfig, durationLimitError } from "../config.js";
 import { log } from "../logger.js";
 import type { TrackRow } from "../db/index.js";
 import {
@@ -125,12 +125,24 @@ async function processQueue(): Promise<void> {
       setTrackDownload(latest.id, "downloading");
       notifyStateChange(eventMode);
 
-      let lastError = "download failed";
+      let lastError = "downloadFailed";
       let ok = false;
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         try {
           const filePath = await downloadOnce(latest);
+          const after = getTrackById(latest.id);
+          if (!after || after.status === "removed") {
+            try { fs.unlinkSync(filePath); } catch { /* ignore */ }
+            ok = true;
+            break;
+          }
           const tags = await readFileTags(filePath, path.basename(filePath));
+          const tooLong = durationLimitError(tags.durationSec, loadConfig().maxTrackMinutes);
+          if (tooLong) {
+            try { fs.unlinkSync(filePath); } catch { /* ignore */ }
+            lastError = "trackTooLong";
+            break;
+          }
           setTrackDownload(latest.id, "ready", { filePath, error: null, durationSec: tags.durationSec });
           void indexMediaFile(filePath, path.basename(filePath));
           notifyStateChange(eventMode);
@@ -138,8 +150,8 @@ async function processQueue(): Promise<void> {
           ok = true;
           break;
         } catch (err) {
-          lastError = err instanceof Error ? err.message : String(err);
-          log.warn(`[download] attempt ${attempt}/${MAX_ATTEMPTS} failed for ${latest.id}: ${lastError}`);
+          lastError = "downloadFailed";
+          log.warn(`[download] attempt ${attempt}/${MAX_ATTEMPTS} failed for ${latest.id}: ${err}`);
         }
       }
 

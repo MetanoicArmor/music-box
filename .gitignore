@@ -11,3 +11,8 @@ config.json
 .curl-cookies
 .test-body.json
 cookies.txt
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/

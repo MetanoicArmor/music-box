@@ -1,5 +1,7 @@
 import { Track } from "../api";
 import { formatDuration } from "../format";
+import TrackListen from "./TrackListen";
+import { useLocale } from "../i18n/locale";
 
 interface Props {
   track: Track;
@@ -13,17 +15,25 @@ interface Props {
   onUnbanIp?: (ip: string) => void;
 }
 
-function downloadLabel(track: Track): { text: string; className: string } | null {
+function downloadLabel(track: Track, t: (key: string) => string): { text: string; className: string } | null {
   const status = track.download_status;
   if (!status || track.source === "local") return null;
-  if (status === "pending") return { text: "ожидает", className: "dl-badge dl-pending" };
-  if (status === "downloading") return { text: "скачивается", className: "dl-badge dl-downloading" };
-  if (status === "failed") return { text: "ошибка", className: "dl-badge dl-failed" };
+  if (status === "pending") return { text: t("track.pending"), className: "dl-badge dl-pending" };
+  if (status === "downloading") return { text: t("track.downloading"), className: "dl-badge dl-downloading" };
+  if (status === "failed") return { text: t("track.failed"), className: "dl-badge dl-failed" };
   return null;
 }
 
+function downloadErrorTitle(raw: string | null | undefined, t: (key: string) => string): string | undefined {
+  if (!raw) return undefined;
+  if (raw === "trackTooLong" || raw === "fileMissing" || raw === "downloadFailed") return t("errors.downloadFailed");
+  if (/длиннее|too long|file missing/i.test(raw)) return t("errors.downloadFailed");
+  return t("errors.downloadFailed");
+}
+
 export default function TrackItem({ track, index, myVote, onVote, admin, onDelete, onDeleteArtist, onBanIp, onUnbanIp }: Props) {
-  const badge = downloadLabel(track);
+  const { t } = useLocale();
+  const badge = downloadLabel(track, t);
   const duration = formatDuration(track.duration_sec);
 
   return (
@@ -31,13 +41,14 @@ export default function TrackItem({ track, index, myVote, onVote, admin, onDelet
       {track.sessionColor && (
         <div className="track-color" style={{ background: track.sessionColor }} />
       )}
+      {track.sessionEmoji && <span className="track-avatar" aria-hidden="true">{track.sessionEmoji}</span>}
       <div className="track-info">
         {index !== undefined && <span className="track-index">{index}.</span>}
         <div className="title">{track.title}</div>
         <div className="artist">{track.artist}</div>
         {duration && <div className="track-duration">{duration}</div>}
         {badge && (
-          <span className={badge.className} title={track.download_error ?? undefined}>
+          <span className={badge.className} title={downloadErrorTitle(track.download_error, t)}>
             {badge.text}
           </span>
         )}
@@ -46,17 +57,18 @@ export default function TrackItem({ track, index, myVote, onVote, admin, onDelet
             <span>{track.addedByIp}</span>
             {onBanIp && (
               <button type="button" className="ip-ban" onClick={() => onBanIp(track.addedByIp!)}>
-                Ban
+                {t("track.ban")}
               </button>
             )}
             {onUnbanIp && (
               <button type="button" className="ip-unban" onClick={() => onUnbanIp(track.addedByIp!)}>
-                Unban
+                {t("track.unban")}
               </button>
             )}
           </div>
         )}
       </div>
+      <TrackListen track={track} />
       <div className="track-votes">
         <button
           className={`vote-btn up ${myVote === 1 ? "active" : ""}`}
@@ -74,10 +86,10 @@ export default function TrackItem({ track, index, myVote, onVote, admin, onDelet
       </div>
       {admin && (
         <div className="admin-track-actions">
-          <button className="delete" onClick={() => onDelete?.(track.id)} title="Удалить трек">
+          <button className="delete" onClick={() => onDelete?.(track.id)} title={t("track.deleteTrack")}>
             ✕
           </button>
-          <button onClick={() => onDeleteArtist?.(track.artist)} title="Удалить артиста">
+          <button onClick={() => onDeleteArtist?.(track.artist)} title={t("track.deleteArtist")}>
             🚫
           </button>
         </div>

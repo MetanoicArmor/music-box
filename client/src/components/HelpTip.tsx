@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocale } from "../i18n/locale";
 
 interface Props {
   text: string;
@@ -6,6 +7,7 @@ interface Props {
 
 export default function HelpTip({ text }: Props) {
   const [open, setOpen] = useState(false);
+  const { t } = useLocale();
 
   return (
     <span
@@ -19,7 +21,7 @@ export default function HelpTip({ text }: Props) {
       }}
       role="button"
       tabIndex={0}
-      aria-label="Подсказка"
+      aria-label={t("help.tip")}
     >
       ?
       {open && <span className="help-tip-popup">{text}</span>}

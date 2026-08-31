@@ -12,6 +12,7 @@ export interface AppConfig {
   voteRateLimit: number;
   voteRateWindowSec: number;
   maxUploadMb: number;
+  maxTrackMinutes: number;
   eventMode: boolean;
 }
 
@@ -23,8 +24,19 @@ const DEFAULT_CONFIG: AppConfig = {
   voteRateLimit: 10,
   voteRateWindowSec: 30,
   maxUploadMb: 100,
+  maxTrackMinutes: 10,
   eventMode: false,
 };
+
+export function isOverDurationLimit(durationSec: number | null | undefined, maxMinutes: number): boolean {
+  if (maxMinutes <= 0) return false;
+  if (durationSec == null || durationSec <= 0) return false;
+  return durationSec > maxMinutes * 60;
+}
+
+export function durationLimitError(durationSec: number | null | undefined, maxMinutes: number): string | null {
+  return isOverDurationLimit(durationSec, maxMinutes) ? "trackTooLong" : null;
+}
 
 function parseJsonConfig(text: string): Record<string, unknown> {
   const stripped = text
@@ -77,14 +89,19 @@ export const PATHS = {
   mpv: path.join(ROOT, "bin", "mpv.exe"),
   ytdlp: path.join(ROOT, "bin", "yt-dlp.exe"),
   clientDist: path.join(ROOT, "dist", "client"),
+  uploadTmp: path.join(ROOT, "data", "upload-tmp"),
 };
 
 export function ensureDirs(): void {
-  for (const dir of [PATHS.media, PATHS.data, PATHS.bin]) {
+  for (const dir of [PATHS.media, PATHS.data, PATHS.bin, PATHS.uploadTmp]) {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
   }
+}
+
+export function getPublicUrl(port: number): string {
+  return `http://${getLanIp()}:${port}`;
 }
 
 export function getLanIp(): string {

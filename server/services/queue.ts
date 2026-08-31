@@ -4,40 +4,77 @@ import { v4 as uuidv4 } from "uuid";
 import { getDb, TrackRow, DownloadStatus, foldSearch } from "../db/index.js";
 import type { AppConfig } from "../config.js";
 import { broadcast } from "../ws/broadcast.js";
+import { AVATAR_TAKEN, SESSION_EMOJIS, nextFreeEmoji, pickFreeEmoji, recentCutoff } from "./sessionEmoji.js";
 
 const SESSION_COLORS = [
   "#ef4444", "#f97316", "#eab308", "#22c55e", "#14b8a6",
   "#3b82f6", "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16",
 ];
 
-export function getOrCreateSession(sessionId: string | undefined, ip: string): { id: string; color: string; banned: boolean } {
+function takenEmojis(exceptId?: string): Set<string> {
+  const db = getDb();
+  const cutoff = recentCutoff();
+  const rows = exceptId
+    ? db.prepare("SELECT emoji FROM sessions WHERE emoji IS NOT NULL AND emoji != '' AND last_seen > ? AND id != ?").all(cutoff, exceptId) as { emoji: string }[]
+    : db.prepare("SELECT emoji FROM sessions WHERE emoji IS NOT NULL AND emoji != '' AND last_seen > ?").all(cutoff) as { emoji: string }[];
+  return new Set(rows.map((r) => r.emoji));
+}
+
+function ensureEmoji(id: string, current: string | null | undefined): string {
+  if (current) return current;
+  const emoji = pickFreeEmoji(takenEmojis(id)) ?? SESSION_EMOJIS[0];
+  getDb().prepare("UPDATE sessions SET emoji = ? WHERE id = ?").run(emoji, id);
+  return emoji;
+}
+
+export function getOrCreateSession(sessionId: string | undefined, ip: string): { id: string; color: string; banned: boolean; emoji: string } {
   const db = getDb();
   const now = Date.now();
 
   if (sessionId) {
-    const existing = db.prepare("SELECT * FROM sessions WHERE id = ?").get(sessionId) as { id: string; color: string; banned: number } | undefined;
+    const existing = db.prepare("SELECT id, color, emoji, banned FROM sessions WHERE id = ?").get(sessionId) as { id: string; color: string; emoji: string | null; banned: number } | undefined;
     if (existing) {
       db.prepare("UPDATE sessions SET last_seen = ?, ip = ? WHERE id = ?").run(now, ip, sessionId);
-      return { id: existing.id, color: existing.color, banned: existing.banned === 1 };
+      return { id: existing.id, color: existing.color, banned: existing.banned === 1, emoji: ensureEmoji(existing.id, existing.emoji) };
     }
   }
 
   const cutoff = now - 5 * 60 * 1000;
   const recentSameIp = db.prepare(`
-    SELECT id, color, banned FROM sessions
+    SELECT id, color, emoji, banned FROM sessions
     WHERE ip = ? AND banned = 0 AND last_seen > ?
     ORDER BY last_seen DESC LIMIT 1
-  `).get(ip, cutoff) as { id: string; color: string; banned: number } | undefined;
+  `).get(ip, cutoff) as { id: string; color: string; emoji: string | null; banned: number } | undefined;
 
   if (recentSameIp) {
     db.prepare("UPDATE sessions SET last_seen = ? WHERE id = ?").run(now, recentSameIp.id);
-    return { id: recentSameIp.id, color: recentSameIp.color, banned: recentSameIp.banned === 1 };
+    return { id: recentSameIp.id, color: recentSameIp.color, banned: recentSameIp.banned === 1, emoji: ensureEmoji(recentSameIp.id, recentSameIp.emoji) };
   }
 
   const id = uuidv4();
   const color = SESSION_COLORS[Math.floor(Math.random() * SESSION_COLORS.length)];
-  db.prepare("INSERT INTO sessions (id, ip, color, banned, last_seen) VALUES (?, ?, ?, 0, ?)").run(id, ip, color, now);
-  return { id, color, banned: false };
+  const emoji = pickFreeEmoji(takenEmojis()) ?? SESSION_EMOJIS[0];
+  db.prepare("INSERT INTO sessions (id, ip, color, emoji, banned, last_seen) VALUES (?, ?, ?, ?, 0, ?)").run(id, ip, color, emoji, now);
+  return { id, color, banned: false, emoji };
+}
+
+export function getSessionEmoji(sessionId: string | null): string | null {
+  if (!sessionId) return null;
+  const row = getDb().prepare("SELECT emoji FROM sessions WHERE id = ?").get(sessionId) as { emoji: string | null } | undefined;
+  return row?.emoji ?? null;
+}
+
+export function cycleSessionEmoji(sessionId: string): string {
+  const row = getDb().prepare("SELECT emoji FROM sessions WHERE id = ?").get(sessionId) as { emoji: string | null } | undefined;
+  if (!row) {
+    throw Object.assign(new Error("sessionNotFound"), { statusCode: 404 });
+  }
+  const next = nextFreeEmoji(row.emoji, takenEmojis(sessionId));
+  if (!next) {
+    throw Object.assign(new Error(AVATAR_TAKEN), { statusCode: 409 });
+  }
+  getDb().prepare("UPDATE sessions SET emoji = ? WHERE id = ?").run(next, sessionId);
+  return next;
 }
 
 export function isSessionBanned(sessionId: string): boolean {
@@ -102,13 +139,17 @@ export function addTrack(input: TrackInput): TrackRow {
   return db.prepare("SELECT * FROM tracks WHERE id = ?").get(id) as TrackRow;
 }
 
-function durationFromMedia(filePath?: string | null): number | null {
+export function getMediaDuration(filePath?: string | null): number | null {
   if (!filePath) return null;
   const resolved = path.resolve(filePath);
   const row = getDb()
     .prepare("SELECT duration_sec FROM media_index WHERE file_path = ? OR file_path = ?")
     .get(filePath, resolved) as { duration_sec: number | null } | undefined;
   return row?.duration_sec ?? null;
+}
+
+function durationFromMedia(filePath?: string | null): number | null {
+  return getMediaDuration(filePath);
 }
 
 export function getQueuedTracks(): TrackRow[] {
@@ -154,15 +195,15 @@ export function searchPlayedTracks(query: string, limit = 40): TrackRow[] {
 export function readdPlayedTrack(trackId: string, sessionId: string): TrackRow {
   const src = getTrackById(trackId);
   if (!src) {
-    throw Object.assign(new Error("Track not found"), { statusCode: 404 });
+    throw Object.assign(new Error("trackNotFound"), { statusCode: 404 });
   }
   if (src.status === "removed") {
-    throw Object.assign(new Error("Track removed"), { statusCode: 400 });
+    throw Object.assign(new Error("trackRemoved"), { statusCode: 400 });
   }
 
   const filePath = src.file_path && fs.existsSync(src.file_path) ? src.file_path : null;
   if (src.source === "local" && !filePath) {
-    throw Object.assign(new Error("File missing"), { statusCode: 400 });
+    throw Object.assign(new Error("fileMissing"), { statusCode: 400 });
   }
 
   return addTrack({
@@ -227,6 +268,15 @@ export function clearQueue(): number {
   const tracks = db.prepare("SELECT id FROM tracks WHERE status = 'queued'").all() as { id: string }[];
   for (const t of tracks) {
     removeTrack(t.id, "queue_cleared");
+  }
+  return tracks.length;
+}
+
+export function clearHistory(): number {
+  const db = getDb();
+  const tracks = db.prepare("SELECT id FROM tracks WHERE status = 'played'").all() as { id: string }[];
+  for (const t of tracks) {
+    removeTrack(t.id, "history_cleared");
   }
   return tracks.length;
 }
@@ -366,6 +416,7 @@ export function enrichTrack(t: TrackRow) {
   return {
     ...t,
     sessionColor: getSessionColor(t.added_by_session),
+    sessionEmoji: getSessionEmoji(t.added_by_session),
     addedByIp: getSessionIp(t.added_by_session),
   };
 }
@@ -376,6 +427,13 @@ export interface AppState {
   history: (TrackRow & { sessionColor: string | null; addedByIp: string | null })[];
   activeUsers: number;
   eventMode: boolean;
+  playing: boolean;
+}
+
+let playingQuery: () => boolean = () => false;
+
+export function setPlayingQuery(fn: () => boolean): void {
+  playingQuery = fn;
 }
 
 export function buildState(eventMode: boolean): AppState {
@@ -389,6 +447,7 @@ export function buildState(eventMode: boolean): AppState {
     history: history.map(enrichTrack),
     activeUsers: getActiveUserCount(),
     eventMode,
+    playing: playingQuery(),
   };
 }
 

@@ -4,7 +4,7 @@ import path from "path";
 import { pipeline } from "stream/promises";
 import { v4 as uuidv4 } from "uuid";
 import type { AppConfig } from "../config.js";
-import { PATHS } from "../config.js";
+import { PATHS, isOverDurationLimit, loadConfig } from "../config.js";
 import {
   addTrack,
   voteTrack,
@@ -21,15 +21,36 @@ import {
   readdPlayedTrack,
   enrichTrack,
   countDownvotes,
+  getMediaDuration,
+  cycleSessionEmoji,
+  getSessionEmoji,
 } from "../services/queue.js";
-import { resolveInput, isOnline, searchYouTubeMany, detectSource } from "../services/resolver.js";
+import { resolveInput, isOnline, searchYouTubeMany, detectSource, resolveYouTubeUrl } from "../services/resolver.js";
 import { player } from "../services/player.js";
 import { kickDownloads } from "../services/downloader.js";
 import { readFileTags } from "../services/tags.js";
 import { indexMediaFile, listMediaLibrary, searchMediaIndex } from "../services/mediaIndex.js";
-import { isAudioExt, uniqueMediaPath } from "../services/mediaNames.js";
+import { isAudioExt, uniqueMediaPath, moveUploadFile, safeMediaName } from "../services/mediaNames.js";
+import { AVATAR_TAKEN } from "../services/sessionEmoji.js";
+import { tErrorFromAccept, isErrorKey, type ErrorKey } from "../i18n/errors.js";
 
 const SESSION_COOKIE = "mb_session";
+
+function e(request: FastifyRequest, key: ErrorKey, vars?: Record<string, string | number>): string {
+  return tErrorFromAccept(request.headers["accept-language"], key, vars);
+}
+
+function limitErr(request: FastifyRequest, durationSec: number | null | undefined, maxMinutes: number): string | null {
+  if (!isOverDurationLimit(durationSec, maxMinutes)) return null;
+  return e(request, "trackTooLong", { minutes: maxMinutes });
+}
+
+function localizeThrown(request: FastifyRequest, err: unknown, fallback: ErrorKey): string {
+  const message = err instanceof Error ? err.message : fallback;
+  if (!isErrorKey(message)) return e(request, fallback);
+  if (message === "trackTooLong") return e(request, message, { minutes: loadConfig().maxTrackMinutes });
+  return e(request, message);
+}
 
 function getIp(request: FastifyRequest): string {
   const raw = (request.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ?? request.ip;
@@ -59,7 +80,7 @@ function setSessionCookie(reply: FastifyReply, sessionId: string): void {
 function requireSession(request: FastifyRequest, reply: FastifyReply, config: AppConfig): string | null {
   const ip = getIp(request);
   if (isIpBanned(ip)) {
-    reply.status(403).send({ error: "You are banned" });
+    reply.status(403).send({ error: e(request, "banned") });
     return null;
   }
 
@@ -67,7 +88,7 @@ function requireSession(request: FastifyRequest, reply: FastifyReply, config: Ap
   setSessionCookie(reply, session.id);
 
   if (session.banned) {
-    reply.status(403).send({ error: "You are banned" });
+    reply.status(403).send({ error: e(request, "banned") });
     return null;
   }
 
@@ -81,7 +102,20 @@ export async function registerTrackRoutes(app: FastifyInstance, config: AppConfi
 
     const state = buildState(config.eventMode);
     const userVotes = getUserVotes(sessionId);
-    return { ...state, userVotes, sessionId };
+    return { ...state, userVotes, sessionId, myEmoji: getSessionEmoji(sessionId) ?? "" };
+  });
+
+  app.post("/api/session/avatar", async (request, reply) => {
+    const sessionId = requireSession(request, reply, config);
+    if (!sessionId) return;
+    try {
+      const emoji = cycleSessionEmoji(sessionId);
+      notifyStateChange(config.eventMode);
+      return { emoji };
+    } catch (err) {
+      const status = (err as { statusCode?: number }).statusCode ?? 400;
+      return reply.status(status).send({ error: localizeThrown(request, err, AVATAR_TAKEN) });
+    }
   });
 
   app.post("/api/tracks", async (request, reply) => {
@@ -89,7 +123,7 @@ export async function registerTrackRoutes(app: FastifyInstance, config: AppConfi
     if (!sessionId) return;
 
     if (config.eventMode) {
-      return reply.status(403).send({ error: "Adding tracks is disabled in event mode" });
+      return reply.status(403).send({ error: e(request, "eventMode") });
     }
 
     const body = request.body as {
@@ -99,9 +133,12 @@ export async function registerTrackRoutes(app: FastifyInstance, config: AppConfi
       source?: string;
       sourceRef?: string;
       filePath?: string;
+      duration_sec?: number | null;
     };
 
     if (body.filePath) {
+      const tooLong = limitErr(request, getMediaDuration(body.filePath), config.maxTrackMinutes);
+      if (tooLong) return reply.status(400).send({ error: tooLong });
       const track = addTrack({
         title: body.title ?? path.basename(body.filePath),
         artist: body.artist ?? "Unknown",
@@ -116,6 +153,8 @@ export async function registerTrackRoutes(app: FastifyInstance, config: AppConfi
 
     if (body.source && body.sourceRef && body.title) {
       if (body.source === "local" && fs.existsSync(body.sourceRef)) {
+        const tooLong = limitErr(request, getMediaDuration(body.sourceRef), config.maxTrackMinutes);
+        if (tooLong) return reply.status(400).send({ error: tooLong });
         const track = addTrack({
           title: body.title,
           artist: body.artist ?? "Unknown",
@@ -129,18 +168,29 @@ export async function registerTrackRoutes(app: FastifyInstance, config: AppConfi
       }
       const source = body.source as "youtube" | "spotify" | "local";
       if (source !== "youtube" && source !== "spotify") {
-        return reply.status(400).send({ error: "source must be youtube or spotify" });
+        return reply.status(400).send({ error: e(request, "invalidSource") });
       }
       const online = await isOnline();
       if (!online) {
-        return reply.status(503).send({ error: "Internet required for YouTube/Spotify" });
+        return reply.status(503).send({ error: e(request, "needInternet") });
       }
+      let durationSec = typeof body.duration_sec === "number" ? body.duration_sec : null;
+      if (source === "youtube" && (durationSec == null || durationSec <= 0)) {
+        try {
+          durationSec = (await resolveYouTubeUrl(body.sourceRef)).durationSec ?? null;
+        } catch {
+          durationSec = null;
+        }
+      }
+      const tooLong = limitErr(request, durationSec, config.maxTrackMinutes);
+      if (tooLong) return reply.status(400).send({ error: tooLong });
       const track = addTrack({
         title: body.title,
         artist: body.artist ?? "Unknown",
         source,
         sourceRef: body.sourceRef,
         sessionId,
+        durationSec,
       });
       notifyStateChange(config.eventMode);
       kickDownloads();
@@ -149,31 +199,33 @@ export async function registerTrackRoutes(app: FastifyInstance, config: AppConfi
 
     const input = body.input?.trim();
     if (!input) {
-      return reply.status(400).send({ error: "input or filePath required" });
+      return reply.status(400).send({ error: e(request, "inputRequired") });
     }
 
     const online = await isOnline();
     const isUrl = /youtube\.com|youtu\.be|spotify\.com/.test(input);
 
     if ((isUrl || detectSource(input) === "search") && !online) {
-      return reply.status(503).send({ error: "Internet required for YouTube/Spotify links" });
+      return reply.status(503).send({ error: e(request, "needInternetLinks") });
     }
 
     try {
       const resolved = await resolveInput(input);
+      const tooLong = limitErr(request, resolved.durationSec, config.maxTrackMinutes);
+      if (tooLong) return reply.status(400).send({ error: tooLong });
       const track = addTrack({
         title: resolved.title,
         artist: resolved.artist,
         source: resolved.source,
         sourceRef: resolved.sourceRef,
         sessionId,
+        durationSec: resolved.durationSec,
       });
       notifyStateChange(config.eventMode);
       kickDownloads();
       return track;
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to resolve track";
-      return reply.status(400).send({ error: msg });
+      return reply.status(400).send({ error: e(request, "resolveFailed") });
     }
   });
 
@@ -191,11 +243,14 @@ export async function registerTrackRoutes(app: FastifyInstance, config: AppConfi
     if (!sessionId) return;
 
     if (config.eventMode) {
-      return reply.status(403).send({ error: "Adding tracks is disabled in event mode" });
+      return reply.status(403).send({ error: e(request, "eventMode") });
     }
 
     const { id } = request.params as { id: string };
     try {
+      const existing = getTrackById(id);
+      const tooLong = limitErr(request, existing?.duration_sec, config.maxTrackMinutes);
+      if (tooLong) return reply.status(400).send({ error: tooLong });
       const track = readdPlayedTrack(id, sessionId);
       notifyStateChange(config.eventMode);
       if (track.download_status === "pending") {
@@ -206,8 +261,7 @@ export async function registerTrackRoutes(app: FastifyInstance, config: AppConfi
       return track;
     } catch (err) {
       const status = (err as { statusCode?: number }).statusCode ?? 400;
-      const message = err instanceof Error ? err.message : "Failed to readd track";
-      return reply.status(status).send({ error: message });
+      return reply.status(status).send({ error: localizeThrown(request, err, "error") });
     }
   });
 
@@ -274,6 +328,7 @@ export async function registerTrackRoutes(app: FastifyInstance, config: AppConfi
           source: t.source,
           sourceRef: t.sourceRef,
           thumbnail: t.thumbnail ?? null,
+          duration_sec: t.durationSec ?? null,
         }));
       } catch {
         youtube = [];
@@ -288,7 +343,7 @@ export async function registerTrackRoutes(app: FastifyInstance, config: AppConfi
     if (!sessionId) return;
 
     if (!checkVoteRateLimit(sessionId, config)) {
-      return reply.status(429).send({ error: "Too many votes, slow down" });
+      return reply.status(429).send({ error: e(request, "tooManyVotes") });
     }
 
     const { id } = request.params as { id: string };
@@ -311,25 +366,47 @@ export async function registerTrackRoutes(app: FastifyInstance, config: AppConfi
     if (!sessionId) return;
 
     if (config.eventMode) {
-      return reply.status(403).send({ error: "Uploads disabled in event mode" });
+      return reply.status(403).send({ error: e(request, "eventModeUploads") });
     }
 
-    const data = await request.file();
+    let data;
+    try {
+      data = await request.file();
+    } catch (err) {
+      const code = (err as { code?: string }).code;
+      if (code === "FST_REQ_FILE_TOO_LARGE") {
+        return reply.status(400).send({ error: e(request, "fileTooLarge") });
+      }
+      throw err;
+    }
     if (!data) {
-      return reply.status(400).send({ error: "No file uploaded" });
+      return reply.status(400).send({ error: e(request, "noFile") });
     }
 
     const ext = path.extname(data.filename).toLowerCase();
     if (!isAudioExt(ext)) {
-      return reply.status(400).send({ error: "Unsupported file type" });
+      return reply.status(400).send({ error: e(request, "unsupportedType") });
     }
 
-    const tmp = path.join(PATHS.media, `.upload-${uuidv4()}${ext}`);
+    const tmp = path.join(PATHS.uploadTmp, `.upload-${uuidv4()}${ext}`);
     try {
       await pipeline(data.file, fs.createWriteStream(tmp));
+      if (data.file.truncated) {
+        try { fs.unlinkSync(tmp); } catch { /* ignore */ }
+        return reply.status(400).send({ error: e(request, "fileTooLarge") });
+      }
+      if (!fs.existsSync(tmp) || fs.statSync(tmp).size === 0) {
+        try { fs.unlinkSync(tmp); } catch { /* ignore */ }
+        return reply.status(400).send({ error: e(request, "emptyUpload") });
+      }
       const tags = await readFileTags(tmp, data.filename);
+      const tooLong = limitErr(request, tags.durationSec, config.maxTrackMinutes);
+      if (tooLong) {
+        try { fs.unlinkSync(tmp); } catch { /* ignore */ }
+        return reply.status(400).send({ error: tooLong });
+      }
       const dest = uniqueMediaPath(tags.artist, tags.title, ext);
-      fs.renameSync(tmp, dest);
+      await moveUploadFile(tmp, dest);
       await indexMediaFile(dest);
 
       return {
@@ -346,29 +423,87 @@ export async function registerTrackRoutes(app: FastifyInstance, config: AppConfi
   });
 
   app.get("/api/stream/:id", async (request, reply) => {
+    const sessionId = requireSession(request, reply, config);
+    if (!sessionId) return;
+
     const { id } = request.params as { id: string };
     const track = getTrackById(id);
-    if (!track || track.source !== "local" || !track.file_path) {
-      return reply.status(404).send({ error: "Track not found" });
+    if (!isStreamableTrack(track) || !track.file_path) {
+      return reply.status(404).send({ error: e(request, "trackNotFound") });
     }
-
     if (!fs.existsSync(track.file_path)) {
-      return reply.status(404).send({ error: "File not found" });
+      return reply.status(404).send({ error: e(request, "fileNotFound") });
     }
 
-    const ext = path.extname(track.file_path).toLowerCase();
-    const mimeTypes: Record<string, string> = {
-      ".mp3": "audio/mpeg",
-      ".mp4": "video/mp4",
-      ".m4a": "audio/mp4",
-      ".ogg": "audio/ogg",
-      ".wav": "audio/wav",
-      ".flac": "audio/flac",
-    };
+    const filePath = track.file_path;
+    const stat = fs.statSync(filePath);
+    const ext = path.extname(filePath).toLowerCase();
+    const download = (request.query as { download?: string }).download === "1";
+    const filename = `${safeMediaName(track.artist, track.title)}${ext || ".bin"}`;
 
-    reply.header("Content-Type", mimeTypes[ext] ?? "application/octet-stream");
-    return reply.send(fs.createReadStream(track.file_path));
+    reply.header("Accept-Ranges", "bytes");
+    reply.header("Content-Type", STREAM_MIME[ext] ?? "application/octet-stream");
+    if (download) {
+      reply.header("Content-Disposition", `attachment; filename="${filename.replace(/"/g, "")}"`);
+    }
+
+    const rangeHeader = request.headers.range;
+    if (rangeHeader) {
+      const range = parseBytesRange(rangeHeader, stat.size);
+      if (!range) {
+        reply.header("Content-Range", `bytes */${stat.size}`);
+        return reply.status(416).send({ error: e(request, "invalidRange") });
+      }
+      reply.status(206);
+      reply.header("Content-Range", `bytes ${range.start}-${range.end}/${stat.size}`);
+      reply.header("Content-Length", String(range.end - range.start + 1));
+      return reply.send(fs.createReadStream(filePath, { start: range.start, end: range.end }));
+    }
+
+    reply.header("Content-Length", String(stat.size));
+    return reply.send(fs.createReadStream(filePath));
   });
+}
+
+const STREAM_STATUSES = new Set(["queued", "playing", "played"]);
+
+function isStreamableTrack(track: { status: string; download_status: string; file_path: string | null } | null): track is { status: string; download_status: string; file_path: string } {
+  if (!track) return false;
+  return STREAM_STATUSES.has(track.status) && track.download_status === "ready" && !!track.file_path;
+}
+
+const STREAM_MIME: Record<string, string> = {
+  ".mp3": "audio/mpeg",
+  ".mp4": "video/mp4",
+  ".m4a": "audio/mp4",
+  ".aac": "audio/aac",
+  ".ogg": "audio/ogg",
+  ".oga": "audio/ogg",
+  ".wav": "audio/wav",
+  ".flac": "audio/flac",
+  ".webm": "audio/webm",
+  ".opus": "audio/ogg",
+};
+
+function parseBytesRange(header: string, size: number): { start: number; end: number } | null {
+  const match = /^bytes=(\d*)-(\d*)$/.exec(header.trim().split(",")[0] ?? "");
+  if (!match) return null;
+  const [, startRaw, endRaw] = match;
+  let start: number;
+  let end: number;
+  if (startRaw === "") {
+    const suffix = Number(endRaw);
+    if (!Number.isFinite(suffix) || suffix <= 0) return null;
+    start = Math.max(0, size - suffix);
+    end = size - 1;
+  } else {
+    start = Number(startRaw);
+    end = endRaw === "" ? size - 1 : Number(endRaw);
+  }
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || start >= size || end < start) {
+    return null;
+  }
+  return { start, end: Math.min(end, size - 1) };
 }
 
 export { SESSION_COOKIE, getIp, getSessionId, setSessionCookie, requireSession };

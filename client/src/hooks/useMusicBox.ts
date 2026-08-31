@@ -7,8 +7,10 @@ const EMPTY_STATE: AppState = {
   history: [],
   activeUsers: 0,
   eventMode: false,
+  playing: false,
   userVotes: {},
   sessionId: "",
+  myEmoji: "",
 };
 
 export function useMusicBox() {
@@ -42,6 +44,7 @@ export function useMusicBox() {
             ...msg.payload,
             userVotes: prev.userVotes,
             sessionId: prev.sessionId,
+            myEmoji: prev.myEmoji,
           }));
         }
       } catch {

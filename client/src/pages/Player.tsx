@@ -1,6 +1,8 @@
 import { CSSProperties } from "react";
 import { AppState } from "../api";
 import { formatDuration } from "../format";
+import TrackListen from "../components/TrackListen";
+import { useLocale } from "../i18n/locale";
 
 interface Props {
   state: AppState;
@@ -16,12 +18,13 @@ function artworkStyle(color: string | null): CSSProperties {
 
 export default function PlayerPage({ state, vote }: Props) {
   const { current, userVotes } = state;
+  const { t } = useLocale();
 
   if (!current) {
     return (
       <div className="empty">
-        <p>Ничего не играет</p>
-        <p className="empty-sub">Добавьте трек в очередь</p>
+        <p>{t("player.empty")}</p>
+        <p className="empty-sub">{t("player.emptySub")}</p>
       </div>
     );
   }
@@ -32,9 +35,13 @@ export default function PlayerPage({ state, vote }: Props) {
   return (
     <div>
       <div className="now-playing">
-        <div className="label">Сейчас играет</div>
-        <div className="artwork" style={artworkStyle(current.sessionColor)}>
-          <span className="artwork-icon">♪</span>
+        <div className="label">{t("player.nowPlaying")}</div>
+        <div className={`artwork${state.playing ? " is-playing" : ""}`} style={artworkStyle(current.sessionColor)}>
+          <div className="viz-bars" aria-hidden="true">
+            {Array.from({ length: 12 }, (_, i) => (
+              <span key={i} className="viz-bar" />
+            ))}
+          </div>
         </div>
         <div className="title">{current.title}</div>
         <div className="artist">{current.artist}</div>
@@ -47,18 +54,19 @@ export default function PlayerPage({ state, vote }: Props) {
           <button
             className={`vote-btn up ${myVote === 1 ? "active" : ""}`}
             onClick={() => vote(current.id, "up")}
-            aria-label="Голос за"
+            aria-label={t("player.voteUp")}
           >
             ▲
           </button>
           <button
             className={`vote-btn down ${myVote === -1 ? "active" : ""}`}
             onClick={() => vote(current.id, "down")}
-            aria-label="Голос против"
+            aria-label={t("player.voteDown")}
           >
             ▼
           </button>
         </div>
+        <TrackListen track={current} labeled />
       </div>
 
       {current.source !== "local" && (

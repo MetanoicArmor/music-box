@@ -55,6 +55,7 @@ export class MpvPlayer {
   private onEndCallback: StateChangeCallback | null = null;
   private eventMode = false;
   private playing = false;
+  private paused = false;
   private ipcReady = false;
   private blockAutoAdvance = false;
   private fileLoadedWaiters: Array<() => void> = [];
@@ -72,6 +73,10 @@ export class MpvPlayer {
 
   isReady(): boolean {
     return this.ipcReady && this.process !== null;
+  }
+
+  isPlaying(): boolean {
+    return this.playing && !this.paused;
   }
 
   async start(): Promise<void> {
@@ -351,7 +356,7 @@ export class MpvPlayer {
     if (!this.isPlayable(track)) {
       log.warn(`[mpv] Skip unready track: ${track.artist} - ${track.title}`);
       if (track.download_status === "ready") {
-        setTrackDownload(track.id, "failed", { error: "File missing" });
+        setTrackDownload(track.id, "failed", { error: "fileMissing" });
       }
       return false;
     }
@@ -361,7 +366,7 @@ export class MpvPlayer {
       playable = resolveLocalFile(track);
     } catch (err) {
       log.error("[mpv] Failed to resolve track:", err);
-      setTrackDownload(track.id, "failed", { error: err instanceof Error ? err.message : "not ready" });
+      setTrackDownload(track.id, "failed", { error: "downloadFailed" });
       throw err;
     }
 
@@ -374,6 +379,7 @@ export class MpvPlayer {
 
     setTrackPlaying(track.id);
     this.playing = true;
+    this.paused = false;
     void this.captureDuration(track.id);
     notifyStateChange(this.eventMode);
     return true;
@@ -513,14 +519,24 @@ export class MpvPlayer {
 
   pause(): boolean {
     const ok = this.sendCommand(["set_property", "pause", true]);
-    if (!ok) log.warn("[mpv] pause failed — IPC not ready");
-    return ok;
+    if (!ok) {
+      log.warn("[mpv] pause failed — IPC not ready");
+      return false;
+    }
+    this.paused = true;
+    notifyStateChange(this.eventMode);
+    return true;
   }
 
   resume(): boolean {
     const ok = this.sendCommand(["set_property", "pause", false]);
-    if (!ok) log.warn("[mpv] resume failed — IPC not ready");
-    return ok;
+    if (!ok) {
+      log.warn("[mpv] resume failed — IPC not ready");
+      return false;
+    }
+    this.paused = false;
+    notifyStateChange(this.eventMode);
+    return true;
   }
 
   seekRelative(seconds: number): void {

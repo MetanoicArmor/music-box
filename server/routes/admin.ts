@@ -1,9 +1,10 @@
-import { FastifyInstance } from "fastify";
+import { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import type { AppConfig } from "../config.js";
 import {
   removeTrack,
   removeTracksByArtist,
   clearQueue,
+  clearHistory,
   banSession,
   banIp,
   unbanSession,
@@ -16,16 +17,21 @@ import {
 } from "../services/queue.js";
 import { player } from "../services/player.js";
 import { requireSession, normalizeClientIp } from "./tracks.js";
+import { tErrorFromAccept, type ErrorKey } from "../i18n/errors.js";
 
 const ADMIN_COOKIE = "mb_admin";
+
+function e(request: FastifyRequest, key: ErrorKey, vars?: Record<string, string | number>): string {
+  return tErrorFromAccept(request.headers["accept-language"], key, vars);
+}
 
 function isAdmin(request: { cookies: Record<string, string | undefined> }): boolean {
   return request.cookies[ADMIN_COOKIE] === "1";
 }
 
-function requireAdmin(request: { cookies: Record<string, string | undefined> }, reply: { status: (n: number) => { send: (b: unknown) => void } }): boolean {
+function requireAdmin(request: FastifyRequest, reply: FastifyReply): boolean {
   if (!isAdmin(request)) {
-    reply.status(401).send({ error: "Admin access required" });
+    reply.status(401).send({ error: e(request, "adminRequired") });
     return false;
   }
   return true;
@@ -45,7 +51,7 @@ export async function registerAdminRoutes(app: FastifyInstance, config: AppConfi
       logAdminAction("login");
       return { ok: true };
     }
-    return reply.status(401).send({ error: "Wrong password" });
+    return reply.status(401).send({ error: e(request, "wrongPassword") });
   });
 
   app.post("/api/admin/logout", async (request, reply) => {
@@ -61,7 +67,7 @@ export async function registerAdminRoutes(app: FastifyInstance, config: AppConfi
     if (!requireAdmin(request, reply)) return;
     const { id } = request.params as { id: string };
     const track = getTrackById(id);
-    if (!track) return reply.status(404).send({ error: "Track not found" });
+    if (!track) return reply.status(404).send({ error: e(request, "trackNotFound") });
 
     removeTrack(id, "admin_removed");
     logAdminAction("remove_track", `${track.artist} - ${track.title}`);
@@ -93,7 +99,7 @@ export async function registerAdminRoutes(app: FastifyInstance, config: AppConfi
       banIp(normalizeClientIp(body.ip.trim()));
       logAdminAction("ban_ip", body.ip);
     } else {
-      return reply.status(400).send({ error: "sessionId or ip required" });
+      return reply.status(400).send({ error: e(request, "sessionOrIp") });
     }
     return { ok: true };
   });
@@ -108,7 +114,7 @@ export async function registerAdminRoutes(app: FastifyInstance, config: AppConfi
       unbanIp(normalizeClientIp(body.ip.trim()));
       logAdminAction("unban_ip", body.ip);
     } else {
-      return reply.status(400).send({ error: "sessionId or ip required" });
+      return reply.status(400).send({ error: e(request, "sessionOrIp") });
     }
     return { ok: true };
   });
@@ -126,14 +132,13 @@ export async function registerAdminRoutes(app: FastifyInstance, config: AppConfi
     try {
       const ok = await player.previous();
       if (!ok) {
-        return reply.status(404).send({ error: "Нет предыдущего трека в истории" });
+        return reply.status(404).send({ error: e(request, "noPrevious") });
       }
       logAdminAction("previous");
       notifyStateChange(config.eventMode);
       return { ok: true };
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Не удалось включить предыдущий трек";
-      return reply.status(503).send({ error: message });
+      return reply.status(503).send({ error: e(request, "previousFailed") });
     }
   });
 
@@ -148,7 +153,7 @@ export async function registerAdminRoutes(app: FastifyInstance, config: AppConfi
   app.post("/api/admin/pause", async (request, reply) => {
     if (!requireAdmin(request, reply)) return;
     if (!player.pause()) {
-      return reply.status(503).send({ error: "Плеер не готов" });
+      return reply.status(503).send({ error: e(request, "playerNotReady") });
     }
     logAdminAction("pause");
     return { ok: true };
@@ -157,7 +162,7 @@ export async function registerAdminRoutes(app: FastifyInstance, config: AppConfi
   app.post("/api/admin/resume", async (request, reply) => {
     if (!requireAdmin(request, reply)) return;
     if (!player.resume()) {
-      return reply.status(503).send({ error: "Плеер не готов" });
+      return reply.status(503).send({ error: e(request, "playerNotReady") });
     }
     logAdminAction("resume");
     return { ok: true };
@@ -173,7 +178,7 @@ export async function registerAdminRoutes(app: FastifyInstance, config: AppConfi
       player.seekRelative(body.seconds);
       logAdminAction("seek", `relative ${body.seconds}s`);
     } else {
-      return reply.status(400).send({ error: "seconds or absolute required" });
+      return reply.status(400).send({ error: e(request, "seekRequired") });
     }
     return { ok: true };
   });
@@ -188,6 +193,14 @@ export async function registerAdminRoutes(app: FastifyInstance, config: AppConfi
     if (!requireAdmin(request, reply)) return;
     const count = clearQueue();
     logAdminAction("clear_queue", `${count} tracks`);
+    notifyStateChange(config.eventMode);
+    return { removed: count };
+  });
+
+  app.post("/api/admin/clear-history", async (request, reply) => {
+    if (!requireAdmin(request, reply)) return;
+    const count = clearHistory();
+    logAdminAction("clear_history", `${count} tracks`);
     notifyStateChange(config.eventMode);
     return { removed: count };
   });

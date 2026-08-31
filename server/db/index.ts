@@ -68,6 +68,10 @@ function migrateDb(db: Database.Database): void {
   if (mediaCols.length > 0 && !mediaCols.some((c) => c.name === "duration_sec")) {
     db.exec("ALTER TABLE media_index ADD COLUMN duration_sec INTEGER");
   }
+  const sessionCols = db.prepare("PRAGMA table_info(sessions)").all() as { name: string }[];
+  if (sessionCols.length > 0 && !sessionCols.some((c) => c.name === "emoji")) {
+    db.exec("ALTER TABLE sessions ADD COLUMN emoji TEXT");
+  }
   db.exec("CREATE INDEX IF NOT EXISTS idx_media_title ON media_index(title)");
   db.exec("CREATE INDEX IF NOT EXISTS idx_media_artist ON media_index(artist)");
 }

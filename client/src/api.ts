@@ -14,6 +14,7 @@ export interface Track {
   download_error?: string | null;
   duration_sec?: number | null;
   sessionColor: string | null;
+  sessionEmoji?: string | null;
   addedByIp?: string | null;
 }
 
@@ -47,8 +48,10 @@ export interface AppState {
   history: Track[];
   activeUsers: number;
   eventMode: boolean;
+  playing: boolean;
   userVotes: Record<string, 1 | -1>;
   sessionId: string;
+  myEmoji: string;
 }
 
 export interface ServerInfo {
@@ -76,6 +79,8 @@ export interface AdminLogEntry {
   created_at: number;
 }
 
+import { getLocale, translate } from "./i18n/locale";
+
 async function api<T>(path: string, options?: RequestInit): Promise<T> {
   const method = (options?.method ?? "GET").toUpperCase();
   let body = options?.body;
@@ -84,22 +89,29 @@ async function api<T>(path: string, options?: RequestInit): Promise<T> {
     body = "{}";
   }
 
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = {
+    "Accept-Language": getLocale(),
+  };
   if (body != null && !(body instanceof FormData)) {
     headers["Content-Type"] = "application/json";
   }
 
-  const res = await fetch(path, {
-    credentials: "include",
-    ...options,
-    method,
-    headers: { ...headers, ...(options?.headers as Record<string, string> | undefined) },
-    body,
-  });
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      credentials: "include",
+      ...options,
+      method,
+      headers: { ...headers, ...(options?.headers as Record<string, string> | undefined) },
+      body,
+    });
+  } catch {
+    throw new Error(translate(getLocale(), "errors.requestFailed"));
+  }
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error ?? res.statusText ?? "Request failed");
+    throw new Error(err.error ?? res.statusText ?? translate(getLocale(), "errors.requestFailed"));
   }
 
   if (res.status === 204) return undefined as T;
@@ -109,7 +121,7 @@ async function api<T>(path: string, options?: RequestInit): Promise<T> {
 export const apiClient = {
   getState: () => api<AppState>("/api/state"),
   addTrack: (input: string) => api<Track>("/api/tracks", { method: "POST", body: JSON.stringify({ input }) }),
-  addSuggestion: (data: { title: string; artist?: string; source: string; sourceRef: string }) =>
+  addSuggestion: (data: { title: string; artist?: string; source: string; sourceRef: string; duration_sec?: number | null }) =>
     api<Track>("/api/tracks", { method: "POST", body: JSON.stringify(data) }),
   addLocalTrack: (data: { title: string; artist?: string; filePath: string }) =>
     api<Track>("/api/tracks", { method: "POST", body: JSON.stringify(data) }),
@@ -142,6 +154,8 @@ export const apiClient = {
     api<{ ok: boolean }>("/api/admin/seek", { method: "POST", body: JSON.stringify(data) }),
   adminPlayback: () => api<AdminPlayback>("/api/admin/playback"),
   adminClearQueue: () => api<{ removed: number }>("/api/admin/clear-queue", { method: "POST" }),
+  adminClearHistory: () => api<{ removed: number }>("/api/admin/clear-history", { method: "POST" }),
   adminEventMode: (enabled: boolean) => api<{ eventMode: boolean }>("/api/admin/event-mode", { method: "POST", body: JSON.stringify({ enabled }) }),
   adminLog: () => api<AdminLogEntry[]>("/api/admin/log"),
+  cycleAvatar: () => api<{ emoji: string }>("/api/session/avatar", { method: "POST" }),
 };

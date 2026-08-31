@@ -3,20 +3,19 @@ import fastifyCookie from "@fastify/cookie";
 import fastifyMultipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
 import fastifyWebsocket from "@fastify/websocket";
-import httpolyglot from "httpolyglot";
 import fs from "fs";
 import path from "path";
-import { loadConfig, ensureDirs, getLanIp, PATHS } from "./config.js";
-import { ensureTlsCert, getPublicUrl } from "./tls.js";
+import { loadConfig, ensureDirs, getLanIp, getPublicUrl, PATHS } from "./config.js";
 import { getDb } from "./db/index.js";
 import { registerTrackRoutes } from "./routes/tracks.js";
 import { registerAdminRoutes } from "./routes/admin.js";
-import { addClient, removeClient, broadcast } from "./ws/broadcast.js";
-import { buildState, notifyStateChange, resetToEmptySession } from "./services/queue.js";
+import { addClient, removeClient } from "./ws/broadcast.js";
+import { buildState, notifyStateChange, resetToEmptySession, setPlayingQuery } from "./services/queue.js";
 import { player } from "./services/player.js";
 import { kickDownloads, setDownloaderEventMode } from "./services/downloader.js";
 import { scanMediaLibrary } from "./services/mediaIndex.js";
 import { log } from "./logger.js";
+import { tErrorFromAccept } from "./i18n/errors.js";
 
 const config = loadConfig();
 ensureDirs();
@@ -27,18 +26,9 @@ if (sessionReset.stoppedPlaying || sessionReset.clearedQueue > 0) {
 }
 void scanMediaLibrary().catch((err) => log.warn("[media] scan failed:", err));
 
-const tls = await ensureTlsCert();
-
 const app = Fastify({
   logger: false,
   trustProxy: true,
-  serverFactory: (handler) => {
-    const server = httpolyglot.createServer(
-      { key: tls.key, cert: tls.cert },
-      handler as (...args: unknown[]) => void
-    );
-    return server;
-  },
 });
 
 await app.register(fastifyCookie);
@@ -62,7 +52,7 @@ app.get("/api/info", async () => {
     url: getPublicUrl(config.port),
     port: config.port,
     lanIp,
-    https: true,
+    https: false,
   };
 });
 
@@ -85,7 +75,7 @@ if (fs.existsSync(clientDist)) {
 
   app.setNotFoundHandler((request, reply) => {
     if (request.url.startsWith("/api") || request.url.startsWith("/ws")) {
-      return reply.status(404).send({ error: "Not found" });
+      return reply.status(404).send({ error: tErrorFromAccept(request.headers["accept-language"], "notFound") });
     }
     const indexPath = path.join(clientDist, "index.html");
     if (fs.existsSync(indexPath)) {
@@ -97,6 +87,7 @@ if (fs.existsSync(clientDist)) {
 
 try {
   await player.start();
+  setPlayingQuery(() => player.isPlaying());
   player.setEventMode(config.eventMode);
   setDownloaderEventMode(config.eventMode);
   player.onTrackEnd(() => notifyStateChange(config.eventMode));
@@ -109,17 +100,12 @@ try {
 
 await app.listen({ port: config.port, host: "0.0.0.0" });
 
-const lanIp = getLanIp();
 const baseUrl = getPublicUrl(config.port);
 log.info("");
 log.info("  Music Box is running!");
 log.info(`  Local:   http://localhost:${config.port}`);
-log.info(`  Secure:  https://localhost:${config.port}`);
 log.info(`  Network: ${baseUrl}`);
 log.info(`  Admin:   ${baseUrl}/admin`);
-log.info("");
-log.info("  QR-код для телефона использует HTTPS.");
-log.info("  На телефоне: Дополнительно -> Перейти на сайт (сертификат локальный).");
 log.info("");
 
 process.on("SIGINT", () => {
