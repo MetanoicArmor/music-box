@@ -215,10 +215,10 @@ a {
 }
 
 .track-avatar {
-  font-size: 1.15rem;
+  font-size: 0.95rem;
   line-height: 1;
   flex-shrink: 0;
-  width: 1.4rem;
+  width: 1.1rem;
   text-align: center;
   font-family: "Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
 }
@@ -529,9 +529,9 @@ a {
 
 .track-item {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
   background: transparent;
   transition: background 0.15s;
 }
@@ -542,9 +542,26 @@ a {
 
 .track-color {
   width: 4px;
-  height: 40px;
+  min-height: 36px;
+  align-self: stretch;
   border-radius: 4px;
   flex-shrink: 0;
+}
+
+.track-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.track-main {
+  min-width: 0;
+}
+
+.track-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
 }
 
 .track-index {
@@ -552,7 +569,60 @@ a {
   font-size: 0.8125rem;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  min-width: 1.25rem;
+  flex-shrink: 0;
+}
+
+.track-main .title {
+  font-weight: 600;
+  font-size: 0.9375rem;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1;
+}
+
+.track-main .artist {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+
+.track-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+  min-width: 0;
+}
+
+.track-duration {
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.track-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+
+.track-score-readonly {
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  flex-shrink: 0;
 }
 
 .track-info {
@@ -578,13 +648,6 @@ a {
   margin-top: 2px;
 }
 
-.track-duration {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  font-variant-numeric: tabular-nums;
-  margin-top: 2px;
-}
-
 .track-votes {
   display: flex;
   align-items: center;
@@ -605,6 +668,18 @@ a {
   width: 34px;
   height: 34px;
   font-size: 0.875rem;
+}
+
+.track-listen.is-compact {
+  gap: 4px;
+}
+
+.track-listen.is-compact .listen-btn {
+  min-width: 26px;
+  height: 26px;
+  padding: 0 6px;
+  font-size: 0.6875rem;
+  border-radius: 8px;
 }
 
 .track-listen {
@@ -662,29 +737,15 @@ a {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 8px;
   flex-shrink: 0;
-}
-
-.history-meta {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
-  flex-shrink: 0;
-  font-size: 0.75rem;
-  color: var(--text-muted);
-}
-
-.history-votes {
-  font-weight: 600;
-  color: var(--text-secondary);
+  padding-top: 2px;
 }
 
 .history-readd {
   width: auto;
-  padding: 8px 12px;
-  font-size: 0.75rem;
+  padding: 6px 10px;
+  font-size: 0.6875rem;
+  white-space: nowrap;
 }
 
 .history-readd.is-added,
@@ -1084,9 +1145,9 @@ a {
 }
 
 .admin-track-actions button {
-  padding: 6px 10px;
+  padding: 4px 8px;
   border-radius: 8px;
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
   background: rgba(118, 118, 128, 0.22);
 }
 
@@ -1378,13 +1439,14 @@ a {
 
 .dl-badge {
   display: inline-block;
-  margin-top: 4px;
-  font-size: 0.625rem;
+  margin-top: 0;
+  font-size: 0.5625rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  padding: 2px 7px;
+  padding: 2px 6px;
   border-radius: var(--radius-pill);
+  flex-shrink: 0;
 }
 
 .dl-pending {
@@ -1403,13 +1465,22 @@ a {
 }
 
 .track-ip {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 4px;
-  font-size: 0.75rem;
+  gap: 6px;
+  margin-top: 0;
+  font-size: 0.6875rem;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.track-ip > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ip-ban {

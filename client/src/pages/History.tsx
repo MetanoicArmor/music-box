@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AppState, Track, apiClient } from "../api";
-import { formatDuration, foldSearch } from "../format";
+import { displayArtist, formatDuration, foldSearch } from "../format";
 import TrackListen from "../components/TrackListen";
+import TrackMetaRow from "../components/TrackMetaRow";
 import { useLocale } from "../i18n/locale";
 
 interface Props {
@@ -126,20 +127,24 @@ export default function HistoryPage({ state, refresh }: Props) {
               {track.sessionColor && (
                 <div className="track-color" style={{ background: track.sessionColor }} />
               )}
-              {track.sessionEmoji && <span className="track-avatar" aria-hidden="true">{track.sessionEmoji}</span>}
-              <div className="track-info">
-                <div className="title">{track.title}</div>
-                <div className="artist">{track.artist}</div>
-              </div>
-              <div className="history-actions">
-                <div className="history-meta">
-                  <span>{formatDuration(track.duration_sec) || "—"}</span>
-                  {track.vote_score !== 0 && (
-                    <span className="history-votes">{track.vote_score > 0 ? "+" : ""}{track.vote_score}</span>
+              <div className="track-body">
+                <div className="track-main">
+                  <div className="title">{track.title}</div>
+                  {displayArtist(track.title, track.artist) && (
+                    <div className="artist">{track.artist}</div>
                   )}
                 </div>
-                <TrackListen track={track} />
-                {!eventMode && (
+                <TrackMetaRow emoji={track.sessionEmoji} duration={formatDuration(track.duration_sec) || null}>
+                  <TrackListen track={track} compact />
+                  {track.vote_score !== 0 && (
+                    <span className="track-score-readonly">
+                      {track.vote_score > 0 ? "+" : ""}{track.vote_score}
+                    </span>
+                  )}
+                </TrackMetaRow>
+              </div>
+              {!eventMode && (
+                <div className="history-actions">
                   <button
                     type="button"
                     className={`btn history-readd${queued ? " is-added" : " btn-secondary"}`}
@@ -148,8 +153,8 @@ export default function HistoryPage({ state, refresh }: Props) {
                   >
                     {queued ? t("history.added") : addingId === track.id ? t("history.adding") : t("history.toQueue")}
                   </button>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           );
         })}

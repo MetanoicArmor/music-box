@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { AppState, apiClient, AdminLogEntry } from "../api";
 import TrackItem from "../components/TrackItem";
 import HelpTip from "../components/HelpTip";
+import { displayArtist, formatLocaleTime } from "../format";
 import { useLocale } from "../i18n/locale";
 
 interface Props {
@@ -142,7 +143,9 @@ function AdminPlayer({ refresh, hasCurrent, hasQueue, hasHistory }: AdminPlayerP
         <div className="admin-player-now">
           <div className="admin-player-label">{t("admin.nowPlaying")}</div>
           <div className="admin-player-title">{currentTrack.title}</div>
-          <div className="admin-player-artist">{currentTrack.artist}</div>
+          {displayArtist(currentTrack.title, currentTrack.artist) && (
+            <div className="admin-player-artist">{currentTrack.artist}</div>
+          )}
         </div>
       ) : (
         <div className="admin-player-now">
@@ -219,7 +222,7 @@ function AdminPlayer({ refresh, hasCurrent, hasQueue, hasHistory }: AdminPlayerP
 }
 
 export default function AdminPage({ state, refresh }: Props) {
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const [isAdmin, setIsAdmin] = useState(false);
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState("");
@@ -374,8 +377,6 @@ export default function AdminPage({ state, refresh }: Props) {
           <TrackItem
             key={track.id}
             track={track}
-            myVote={state.userVotes[track.id]}
-            onVote={async () => {}}
             admin
             onDelete={handleDeleteTrack}
             onDeleteArtist={handleDeleteArtist}
@@ -396,8 +397,6 @@ export default function AdminPage({ state, refresh }: Props) {
           <TrackItem
             key={track.id}
             track={track}
-            myVote={state.userVotes[track.id]}
-            onVote={async () => {}}
             admin
             onDelete={handleDeleteTrack}
             onBanIp={(ip) => {
@@ -415,7 +414,7 @@ export default function AdminPage({ state, refresh }: Props) {
       <div className="log-list">
       {log.map((entry, i) => (
         <div key={i} className="log-entry">
-          {new Date(entry.created_at).toLocaleTimeString()} — {t(`admin.log.${entry.action}`)}
+          {formatLocaleTime(entry.created_at, locale)} — {t(`admin.log.${entry.action}`)}
           {entry.details && `: ${entry.details}`}
         </div>
       ))}

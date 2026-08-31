@@ -1,6 +1,6 @@
 import { CSSProperties } from "react";
 import { AppState } from "../api";
-import { formatDuration } from "../format";
+import { displayArtist, formatDuration } from "../format";
 import TrackListen from "../components/TrackListen";
 import { useLocale } from "../i18n/locale";
 
@@ -31,6 +31,7 @@ export default function PlayerPage({ state, vote }: Props) {
 
   const myVote = userVotes[current.id];
   const duration = formatDuration(current.duration_sec);
+  const artist = displayArtist(current.title, current.artist);
 
   return (
     <div>
@@ -44,7 +45,7 @@ export default function PlayerPage({ state, vote }: Props) {
           </div>
         </div>
         <div className="title">{current.title}</div>
-        <div className="artist">{current.artist}</div>
+        {artist && <div className="artist">{artist}</div>}
         {duration && <div className="now-duration">{duration}</div>}
         <div className="vote-score">
           {current.vote_score > 0 ? "+" : ""}

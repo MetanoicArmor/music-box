@@ -6,17 +6,23 @@ import { useLocale } from "../i18n/locale";
 interface Props {
   track: Track;
   labeled?: boolean;
+  compact?: boolean;
 }
 
-export default function TrackListen({ track, labeled = false }: Props) {
+export default function TrackListen({ track, labeled = false, compact = false }: Props) {
   const { playingId, hidePreview, toggle } = useLocalPreview();
   const { t } = useLocale();
   if (!canListen(track)) return null;
 
   const playing = playingId === track.id;
+  const className = [
+    "track-listen",
+    labeled ? "is-labeled" : "",
+    compact ? "is-compact" : "",
+  ].filter(Boolean).join(" ");
 
   return (
-    <div className={`track-listen${labeled ? " is-labeled" : ""}`}>
+    <div className={className}>
       {!hidePreview && (
         <button
           type="button"
