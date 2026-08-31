@@ -1,5 +1,5 @@
 import { NavLink, Routes, Route } from "react-router-dom";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useMusicBox } from "./hooks/useMusicBox";
 import { apiClient } from "./api";
 import PlayerPage from "./pages/Player";
@@ -10,30 +10,6 @@ import AdminPage from "./pages/Admin";
 import { PreviewProvider } from "./hooks/useLocalPreview";
 import { useLocale } from "./i18n/locale";
 import LangSwitch from "./i18n/LangSwitch";
-
-const LOGO_PERIOD_PX = 200;
-const LOGO_DURATION_MS = 8000;
-
-function PartyLogo() {
-  const ref = useRef<HTMLHeadingElement>(null);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    let raf = 0;
-    const started = performance.now();
-    const tick = (now: number) => {
-      const t = ((now - started) % LOGO_DURATION_MS) / LOGO_DURATION_MS;
-      el.style.backgroundPositionX = `${-t * LOGO_PERIOD_PX}px`;
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, []);
-
-  return <h1 ref={ref} className="party-logo">Music Box</h1>;
-}
 
 export default function App() {
   const { state, connected, vote, refresh } = useMusicBox();
@@ -62,7 +38,7 @@ export default function App() {
       <div className="app">
         <header className="header">
           <div className="header-brand">
-            <PartyLogo />
+            <h1 className="party-logo">Music Box</h1>
             <button type="button" className="avatar-btn" onClick={cycleAvatar} title={t("header.changeAvatar")}>
               {state.myEmoji || "🙂"}
             </button>

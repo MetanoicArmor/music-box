@@ -3,12 +3,6 @@ package com.musicbox.host
 import android.graphics.Bitmap
 import android.webkit.WebView
 import androidx.activity.ComponentActivity
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -50,10 +44,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -94,34 +86,17 @@ private val LogoPartyColors = listOf(
     Color(0xFF64D2FF),
     Color(0xFF0A84FF),
     Color(0xFFBF5AF2),
-    Color(0xFFFF2D55),
 )
 
 @Composable
 private fun PartyLogo() {
-    val shift by rememberInfiniteTransition(label = "logo").animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(6000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart,
-        ),
-        label = "shift",
-    )
-    val period = 200f
-    val x = -shift * period
     Text(
         "Music Box",
         style = TextStyle(
             fontSize = MaterialTheme.typography.headlineMedium.fontSize,
             fontWeight = FontWeight.Bold,
             letterSpacing = MaterialTheme.typography.headlineMedium.letterSpacing,
-            brush = Brush.linearGradient(
-                colors = LogoPartyColors,
-                start = Offset(x, 0f),
-                end = Offset(x + period, 10f),
-                tileMode = TileMode.Repeated,
-            ),
+            brush = Brush.linearGradient(LogoPartyColors),
         ),
     )
 }
