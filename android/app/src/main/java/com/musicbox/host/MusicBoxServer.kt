@@ -54,7 +54,7 @@ private const val ADMIN_COOKIE = "mb_admin"
 
 class MusicBoxServer(
     private val context: Context,
-    private val config: AppConfig,
+    private val config: () -> AppConfig,
     private val queue: QueueRepository,
     private val player: PlaybackController,
     private val mediaIndex: MediaIndex,
@@ -62,6 +62,7 @@ class MusicBoxServer(
     private val downloader: TrackDownloader,
     private val setEventMode: (Boolean) -> Unit,
 ) {
+    private fun cfg() = config()
     private val jsonMapper = Json { encodeDefaults = true; ignoreUnknownKeys = true }
     private val clients = CopyOnWriteArraySet<DefaultWebSocketSession>()
     private var engine: ApplicationEngine? = null
@@ -89,10 +90,10 @@ class MusicBoxServer(
     fun start() {
         // CIO on Android cannot do TLS — HTTPS throws asynchronously and crashes the process.
         httpsEnabled = false
-        engine = embeddedServer(CIO, port = config.port, host = "0.0.0.0") {
+        engine = embeddedServer(CIO, port = cfg().port, host = "0.0.0.0") {
             configure()
         }.start(wait = false)
-        android.util.Log.i("MusicBox", "HTTP server listening on 0.0.0.0:${config.port}")
+        android.util.Log.i("MusicBox", "HTTP server listening on 0.0.0.0:${cfg().port}")
     }
 
     fun stop() {
@@ -133,8 +134,8 @@ class MusicBoxServer(
 
             get("/api/info") {
                 val lanIp = getLanIp()
-                val url = if (httpsEnabled) getPublicUrl(config.port, lanIp) else "http://$lanIp:${config.port}"
-                call.respond(ServerInfoDto(url, config.port, lanIp, httpsEnabled))
+                val url = if (httpsEnabled) getPublicUrl(cfg().port, lanIp) else "http://$lanIp:${cfg().port}"
+                call.respond(ServerInfoDto(url, cfg().port, lanIp, httpsEnabled))
             }
 
             get("/api/state") {
@@ -169,14 +170,14 @@ class MusicBoxServer(
 
             post("/api/tracks") {
                 val session = requireSession(call) ?: return@post
-                if (config.eventMode) {
+                if (cfg().eventMode) {
                     call.respond(HttpStatusCode.Forbidden, call.apiError("eventMode"))
                     return@post
                 }
                 val body = call.receiveJson()
                 val filePath = body.str("filePath")
                 if (!filePath.isNullOrBlank()) {
-                    config.durationLimitError(queue.mediaDuration(filePath))?.let {
+                    cfg().durationLimitError(queue.mediaDuration(filePath))?.let {
                         call.respond(HttpStatusCode.BadRequest, call.apiError("trackTooLong"))
                         return@post
                     }
@@ -198,7 +199,7 @@ class MusicBoxServer(
                 val title = body.str("title")
                 if (!source.isNullOrBlank() && !sourceRef.isNullOrBlank() && !title.isNullOrBlank()) {
                     if (source == "local" && File(sourceRef).exists()) {
-                        config.durationLimitError(queue.mediaDuration(sourceRef))?.let {
+                        cfg().durationLimitError(queue.mediaDuration(sourceRef))?.let {
                             call.respond(HttpStatusCode.BadRequest, call.apiError("trackTooLong"))
                             return@post
                         }
@@ -220,7 +221,7 @@ class MusicBoxServer(
                     if (source == "youtube" && (durationSec == null || durationSec <= 0)) {
                         durationSec = runCatching { Youtube.resolveYouTubeUrl(sourceRef).durationSec }.getOrNull()
                     }
-                    config.durationLimitError(durationSec)?.let {
+                    cfg().durationLimitError(durationSec)?.let {
                         call.respond(HttpStatusCode.BadRequest, call.apiError("trackTooLong"))
                         return@post
                     }
@@ -243,7 +244,7 @@ class MusicBoxServer(
                 }
                 try {
                     val resolved = Youtube.resolveInput(input)
-                    config.durationLimitError(resolved.durationSec)?.let {
+                    cfg().durationLimitError(resolved.durationSec)?.let {
                         call.respond(HttpStatusCode.BadRequest, call.apiError("trackTooLong"))
                         return@post
                     }
@@ -268,14 +269,14 @@ class MusicBoxServer(
             post("/api/tracks/{id}/readd") {
                 call.drainJsonBody()
                 val session = requireSession(call) ?: return@post
-                if (config.eventMode) {
+                if (cfg().eventMode) {
                     call.respond(HttpStatusCode.Forbidden, call.apiError("eventMode"))
                     return@post
                 }
                 val id = call.parameters["id"] ?: return@post
                 try {
                     val existing = queue.getTrackById(id)
-                    config.durationLimitError(existing?.durationSec)?.let {
+                    cfg().durationLimitError(existing?.durationSec)?.let {
                         call.respond(HttpStatusCode.BadRequest, call.apiError("trackTooLong"))
                         return@post
                     }
@@ -346,7 +347,7 @@ class MusicBoxServer(
                 val downBefore = if (before?.status == "playing") queue.countDownvotes(id) else 0
                 val result = queue.voteTrack(id, session, direction)
                 val downAfter = queue.countDownvotes(id)
-                if (before?.status == "playing" && downAfter >= config.playingKickDislikes && downAfter > downBefore) {
+                if (before?.status == "playing" && downAfter >= cfg().playingKickDislikes && downAfter > downBefore) {
                     player.skip()
                 }
                 queue.notifyStateChange()
@@ -355,7 +356,7 @@ class MusicBoxServer(
 
             post("/api/upload") {
                 val session = requireSession(call) ?: return@post
-                if (config.eventMode) {
+                if (cfg().eventMode) {
                     call.respond(HttpStatusCode.Forbidden, call.apiError("eventModeUploads"))
                     return@post
                 }
@@ -368,14 +369,14 @@ class MusicBoxServer(
                         val tmp = paths.newTempFile(".bin")
                         try {
                             tmp.outputStream().buffered().use { out -> copyUploadBytes(payload, out) }
-                            if (tmp.length() > config.maxUploadMb.toLong() * 1024 * 1024) {
+                            if (tmp.length() > cfg().maxUploadMb.toLong() * 1024 * 1024) {
                                 throw HttpException(400, "fileTooLarge")
                             }
                             if (tmp.length() == 0L) throw HttpException(400, "emptyUpload")
                             val ext = MediaNames.resolveAudioExt(name, part.contentType?.toString(), tmp)
                                 ?: throw HttpException(400, "unsupportedType")
                             val tags = Tags.readFileTags(tmp, name)
-                            config.durationLimitError(tags.durationSec)?.let { throw HttpException(400, it) }
+                            cfg().durationLimitError(tags.durationSec)?.let { throw HttpException(400, it) }
                             val dest = paths.publishAudio(tmp, tags.artist, tags.title, ext, deleteSource = true)
                             mediaIndex.indexFile(dest, name)
                             paths.notifyFile(dest)
@@ -429,7 +430,7 @@ class MusicBoxServer(
             post("/api/admin/login") {
                 requireSession(call) ?: return@post
                 val body = call.receiveJson()
-                if (body.str("password") == config.adminPassword) {
+                if (body.str("password") == cfg().adminPassword) {
                     call.setCookie(ADMIN_COOKIE, "1", 60 * 60 * 24)
                     queue.logAdminAction("login")
                     call.respond(OkDto())
@@ -620,7 +621,7 @@ class MusicBoxServer(
             post("/api/admin/event-mode") {
                 if (!requireAdmin(call)) return@post
                 val body = call.receiveJson()
-                val enabled = body.bool("enabled") ?: !config.eventMode
+                val enabled = body.bool("enabled") ?: !cfg().eventMode
                 setEventMode(enabled)
                 queue.logAdminAction("event_mode", if (enabled) "enabled" else "disabled")
                 queue.notifyStateChange()
@@ -680,7 +681,7 @@ class MusicBoxServer(
     }
 
     private fun ApplicationCall.apiError(key: String): ErrorDto {
-        val vars = if (key == "trackTooLong") mapOf("minutes" to config.maxTrackMinutes.toString()) else emptyMap()
+        val vars = if (key == "trackTooLong") mapOf("minutes" to cfg().maxTrackMinutes.toString()) else emptyMap()
         return ErrorDto(Errors.t(this, key, vars))
     }
 

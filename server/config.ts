@@ -45,23 +45,64 @@ function parseJsonConfig(text: string): Record<string, unknown> {
   return JSON.parse(stripped) as Record<string, unknown>;
 }
 
-export function loadConfig(): AppConfig {
-  const configPath = path.join(ROOT, "config.json");
-  const examplePath = path.join(ROOT, "config.example.json");
+function configPath(): string {
+  return path.join(ROOT, "config.json");
+}
 
-  if (!fs.existsSync(configPath)) {
-    if (fs.existsSync(examplePath)) {
-      fs.copyFileSync(examplePath, configPath);
+function examplePath(): string {
+  return path.join(ROOT, "config.example.json");
+}
+
+function fileMtime(file: string): number {
+  try {
+    return fs.statSync(file).mtimeMs;
+  } catch {
+    return -1;
+  }
+}
+
+function readConfigFromDisk(): AppConfig {
+  const file = configPath();
+  if (fs.existsSync(file)) {
+    const raw = parseJsonConfig(fs.readFileSync(file, "utf-8"));
+    return { ...DEFAULT_CONFIG, ...raw };
+  }
+  return { ...DEFAULT_CONFIG };
+}
+
+const liveConfig: AppConfig = { ...DEFAULT_CONFIG };
+let cachedMtime = -1;
+
+function refreshVoteSettings(force: boolean): void {
+  const file = configPath();
+  const mtime = fileMtime(file);
+  if (!force && mtime === cachedMtime) return;
+  const fromDisk = readConfigFromDisk();
+  const eventMode = liveConfig.eventMode;
+  Object.assign(liveConfig, fromDisk);
+  if (!force) liveConfig.eventMode = eventMode;
+  cachedMtime = mtime;
+}
+
+export function loadConfig(): AppConfig {
+  const file = configPath();
+  const example = examplePath();
+
+  if (!fs.existsSync(file)) {
+    if (fs.existsSync(example)) {
+      fs.copyFileSync(example, file);
       console.log("Created config.json from config.example.json");
     }
   }
 
-  if (fs.existsSync(configPath)) {
-    const raw = parseJsonConfig(fs.readFileSync(configPath, "utf-8"));
-    return { ...DEFAULT_CONFIG, ...raw };
-  }
+  refreshVoteSettings(true);
+  return liveConfig;
+}
 
-  return DEFAULT_CONFIG;
+/** Live config: re-reads kick/vote fields from config.json when the file changes. */
+export function getConfig(): AppConfig {
+  refreshVoteSettings(false);
+  return liveConfig;
 }
 
 export const MPV_IPC_NAME = "music-box-mpv";

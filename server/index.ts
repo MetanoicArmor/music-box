@@ -10,7 +10,7 @@ import { getDb } from "./db/index.js";
 import { registerTrackRoutes } from "./routes/tracks.js";
 import { registerAdminRoutes } from "./routes/admin.js";
 import { addClient, removeClient } from "./ws/broadcast.js";
-import { buildState, notifyStateChange, resetToEmptySession, setPlayingQuery } from "./services/queue.js";
+import { buildState, notifyStateChange, setPlayingQuery } from "./services/queue.js";
 import { player } from "./services/player.js";
 import { kickDownloads, setDownloaderEventMode } from "./services/downloader.js";
 import { scanMediaLibrary } from "./services/mediaIndex.js";
@@ -20,10 +20,6 @@ import { tErrorFromAccept } from "./i18n/errors.js";
 const config = loadConfig();
 ensureDirs();
 getDb();
-const sessionReset = resetToEmptySession();
-if (sessionReset.stoppedPlaying || sessionReset.clearedQueue > 0) {
-  log.info(`[queue] fresh start — cleared queue (${sessionReset.clearedQueue}), stopped previous track`);
-}
 void scanMediaLibrary().catch((err) => log.warn("[media] scan failed:", err));
 
 const app = Fastify({
@@ -92,6 +88,7 @@ try {
   setDownloaderEventMode(config.eventMode);
   player.onTrackEnd(() => notifyStateChange(config.eventMode));
   kickDownloads();
+  await player.startPlaybackIfIdle();
 } catch (err) {
   log.warn("mpv not available — playback disabled until mpv is installed:", (err as Error).message);
   log.warn("Run: npm run setup");

@@ -69,8 +69,6 @@ class HostRuntime(private val app: Application) {
         var broadcaster: () -> Unit = {}
         val q = QueueRepository(db, { config }, { broadcaster() }) { player?.isPlaybackActive() == true }
         queue = q
-        val (cleared, stopped) = q.resetToEmptySession()
-        android.util.Log.i("MusicBox", "fresh start queue=$cleared stopped=$stopped")
         val index = MediaIndex(db, paths)
         mediaIndex = index
         index.scan()
@@ -82,7 +80,7 @@ class HostRuntime(private val app: Application) {
         downloader = dl
         val srv = MusicBoxServer(
             context = app,
-            config = config,
+            config = { config },
             queue = q,
             player = p,
             mediaIndex = index,
@@ -100,6 +98,7 @@ class HostRuntime(private val app: Application) {
         }
         srv.start()
         dl.kick()
+        scope.launch { p.startPlaybackIfIdle() }
         acquireLocks()
         val lanIp = getLanIp()
         val https = srv.httpsEnabled

@@ -4,7 +4,7 @@ import path from "path";
 import { pipeline } from "stream/promises";
 import { v4 as uuidv4 } from "uuid";
 import type { AppConfig } from "../config.js";
-import { PATHS, isOverDurationLimit, loadConfig } from "../config.js";
+import { PATHS, isOverDurationLimit, getConfig } from "../config.js";
 import {
   addTrack,
   voteTrack,
@@ -48,7 +48,7 @@ function limitErr(request: FastifyRequest, durationSec: number | null | undefine
 function localizeThrown(request: FastifyRequest, err: unknown, fallback: ErrorKey): string {
   const message = err instanceof Error ? err.message : fallback;
   if (!isErrorKey(message)) return e(request, fallback);
-  if (message === "trackTooLong") return e(request, message, { minutes: loadConfig().maxTrackMinutes });
+  if (message === "trackTooLong") return e(request, message, { minutes: getConfig().maxTrackMinutes });
   return e(request, message);
 }
 
@@ -342,7 +342,7 @@ export async function registerTrackRoutes(app: FastifyInstance, config: AppConfi
     const sessionId = requireSession(request, reply, config);
     if (!sessionId) return;
 
-    if (!checkVoteRateLimit(sessionId, config)) {
+    if (!checkVoteRateLimit(sessionId, getConfig())) {
       return reply.status(429).send({ error: e(request, "tooManyVotes") });
     }
 
@@ -352,12 +352,13 @@ export async function registerTrackRoutes(app: FastifyInstance, config: AppConfi
 
     const before = getTrackById(id);
     const downBefore = before?.status === "playing" ? countDownvotes(id) : 0;
-    const result = voteTrack(id, sessionId, direction as 1 | -1, config);
+    const live = getConfig();
+    const result = voteTrack(id, sessionId, direction as 1 | -1, live);
     const downAfter = countDownvotes(id);
-    if (before?.status === "playing" && downAfter >= config.playingKickDislikes && downAfter > downBefore) {
+    if (before?.status === "playing" && downAfter >= live.playingKickDislikes && downAfter > downBefore) {
       await player.skip();
     }
-    notifyStateChange(config.eventMode);
+    notifyStateChange(live.eventMode);
     return { track: result };
   });
 

@@ -25,7 +25,7 @@
     <string name="start_host_first">Сначала запустите хост</string>
     <string name="settings_title">Настройки хоста</string>
     <string name="settings_usb_hint">С компьютера положите mp3 в Music/MusicBox, затем перезапустите хост или откройте «Добавить».</string>
-    <string name="settings_restart_hint">Изменения настроек применяются после перезапуска хоста.</string>
+    <string name="settings_restart_hint">Порт применяется после перезапуска хоста. Пороги голосов и дизлайков — сразу после Сохранить.</string>
     <string name="field_port">Порт</string>
     <string name="field_admin_password">Пароль админа</string>
     <string name="field_kick">Кик из очереди (kickThreshold)</string>

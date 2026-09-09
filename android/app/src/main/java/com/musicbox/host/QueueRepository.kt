@@ -314,6 +314,7 @@ class QueueRepository(
         }
     }
 
+    /** Not used at startup — queue persists across restarts. */
     fun resetToEmptySession(): Pair<Int, Boolean> = tx {
         var stopped = false
         rawQuery("SELECT id FROM tracks WHERE status = 'playing' LIMIT 1", null).use { c ->

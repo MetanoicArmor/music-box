@@ -281,7 +281,7 @@ export function clearHistory(): number {
   return tracks.length;
 }
 
-/** Fresh party session: nothing playing, empty queue. History stays for re-add. */
+/** Keep for admin/manual reset. Startup no longer clears the queue. */
 export function resetToEmptySession(): { clearedQueue: number; stoppedPlaying: boolean } {
   const db = getDb();
   const playing = db.prepare("SELECT id FROM tracks WHERE status = 'playing' LIMIT 1").get() as { id: string } | undefined;

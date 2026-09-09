@@ -88,8 +88,7 @@ class PlaybackController(
     }
 
     suspend fun startPlaybackIfIdle() {
-        val busy = withContext(main) { exo.isPlaying || exo.playWhenReady }
-        if (playing && busy) return
+        if (playing || paused) return
         val current = queue.getCurrentTrack()
         if (current != null) {
             if (!isPlayable(current)) return

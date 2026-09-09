@@ -442,7 +442,7 @@ export class MpvPlayer {
   }
 
   async startPlaybackIfIdle(): Promise<void> {
-    if (this.playing) return;
+    if (this.playing || this.paused) return;
 
     const current = getCurrentTrack();
     if (current) {

@@ -1,7 +1,7 @@
 import { spawn } from "child_process";
 import fs from "fs";
 import path from "path";
-import { PATHS, loadConfig, durationLimitError } from "../config.js";
+import { PATHS, getConfig, durationLimitError } from "../config.js";
 import { log } from "../logger.js";
 import type { TrackRow } from "../db/index.js";
 import {
@@ -137,7 +137,7 @@ async function processQueue(): Promise<void> {
             break;
           }
           const tags = await readFileTags(filePath, path.basename(filePath));
-          const tooLong = durationLimitError(tags.durationSec, loadConfig().maxTrackMinutes);
+          const tooLong = durationLimitError(tags.durationSec, getConfig().maxTrackMinutes);
           if (tooLong) {
             try { fs.unlinkSync(filePath); } catch { /* ignore */ }
             lastError = "trackTooLong";

@@ -25,7 +25,7 @@
     <string name="start_host_first">Start the host first</string>
     <string name="settings_title">Host settings</string>
     <string name="settings_usb_hint">Copy mp3 files into Music/MusicBox from a computer, then restart the host or open Add.</string>
-    <string name="settings_restart_hint">Setting changes apply after you restart the host.</string>
+    <string name="settings_restart_hint">Port applies after you restart the host. Vote and dislike limits apply as soon as you save.</string>
     <string name="field_port">Port</string>
     <string name="field_admin_password">Admin password</string>
     <string name="field_kick">Queue kick (kickThreshold)</string>
