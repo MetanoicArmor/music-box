@@ -14,16 +14,27 @@
   <img src="screenshots/2026-09-09_21-41-03.png" alt="Админ-панель в браузере" width="720" />
 </p>
 
+## Скачать
+
+Готовые сборки: [последний релиз](https://github.com/MetanoicArmor/music-box/releases/latest)
+
+| Платформа | Файл |
+|-----------|------|
+| Windows (portable) | [MusicBox-win64.zip](https://github.com/MetanoicArmor/music-box/releases/latest/download/MusicBox-win64.zip) |
+| Android (хост) | [MusicBox-android.apk](https://github.com/MetanoicArmor/music-box/releases/latest/download/MusicBox-android.apk) |
+
 ## Быстрый старт
 
 ### Portable (для хоста, без установки Node.js)
 
 Архив нужен только на ПК с колонками — гости подключаются с телефонов по Wi‑Fi.
 
-1. Соберите архив: `npm run release` (Node.js нужен только при сборке)
-2. На хосте: распаковать `release/MusicBox-win64.zip` → запустить **`MusicBox.bat`**
+1. Скачайте [MusicBox-win64.zip](https://github.com/MetanoicArmor/music-box/releases/latest/download/MusicBox-win64.zip)
+2. Распакуйте и запустите **`MusicBox.bat`**
 3. Смените пароль в `config.json` (`adminPassword`)
 4. Гостям — QR-код из админки (или ссылку из консоли)
+
+Собрать архив самому: `npm run release` (нужен Node.js).
 
 ### Из исходников (для разработки)
 
@@ -86,11 +97,15 @@ netsh advfirewall firewall add rule name="Music Box" dir=in action=allow protoco
 
 Телефон/планшет может быть хостом вместо Windows-ПК: гости по-прежнему открывают тот же веб-UI по Wi‑Fi.
 
+Скачать APK: [MusicBox-android.apk](https://github.com/MetanoicArmor/music-box/releases/latest/download/MusicBox-android.apk) (sideload).
+
+Собрать самому:
+
 ```bash
 npm run build:android
 ```
 
-APK: `android/app/build/outputs/apk/release/app-release.apk` (sideload). Нужны JDK 17 и Android SDK (`ANDROID_HOME`).
+APK: `android/app/build/outputs/apk/release/app-release.apk`. Нужны JDK 17 и Android SDK (`ANDROID_HOME`).
 
 В приложении: **Старт** → раздайте QR. Музыка играет на динамике/Bluetooth хоста. Без интернета работают только загруженные файлы.
 
