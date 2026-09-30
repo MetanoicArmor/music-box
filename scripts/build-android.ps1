@@ -5,6 +5,19 @@ $appVersion = (& node (Join-Path $root "scripts\sync-version.mjs")).Trim()
 if ($LASTEXITCODE -ne 0 -or -not $appVersion) { throw "Could not read VERSION" }
 Write-Host "Music Box $appVersion - Android"
 
+$iconScript = Join-Path $root "scripts\generate-app-icon.py"
+$iconRan = $false
+if (Get-Command py -ErrorAction SilentlyContinue) {
+  & py -3 $iconScript (Join-Path $root "host-gui\assets")
+  $iconRan = $true
+} elseif (Get-Command python -ErrorAction SilentlyContinue) {
+  & python $iconScript (Join-Path $root "host-gui\assets")
+  $iconRan = $true
+} else {
+  Write-Warning "Python not found; keeping existing launcher icons"
+}
+if ($iconRan -and $LASTEXITCODE -ne 0) { throw "generate-app-icon.py failed" }
+
 function Find-JavaHome {
   $candidates = @()
   foreach ($scope in @("Process", "User", "Machine")) {
@@ -46,7 +59,6 @@ if (-not $env:ANDROID_HOME) {
 
 $localProps = Join-Path $android "local.properties"
 if (-not (Test-Path $localProps) -and $env:ANDROID_HOME) {
-  $sdk = ($env:ANDROID_HOME -replace '\\', '\\')
   "sdk.dir=$($env:ANDROID_HOME -replace '\\', '/')" | Set-Content -Path $localProps -Encoding ASCII
 }
 

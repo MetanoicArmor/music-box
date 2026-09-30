@@ -6,6 +6,14 @@ ANDROID="$ROOT/android"
 APP_VERSION="$(node "$ROOT/scripts/sync-version.mjs")"
 printf 'Music Box %s - Android\n' "$APP_VERSION"
 
+if command -v python3 >/dev/null 2>&1; then
+  python3 "$ROOT/scripts/generate-app-icon.py" "$ROOT/host-gui/assets"
+elif command -v python >/dev/null 2>&1; then
+  python "$ROOT/scripts/generate-app-icon.py" "$ROOT/host-gui/assets"
+else
+  printf 'Python not found; keeping existing launcher icons\n' >&2
+fi
+
 if [[ -z "${JAVA_HOME:-}" || ! -x "${JAVA_HOME}/bin/java" ]]; then
   if [[ "$(uname -s)" == "Darwin" ]] && /usr/libexec/java_home -v 17 >/dev/null 2>&1; then
     JAVA_HOME="$(/usr/libexec/java_home -v 17)"
