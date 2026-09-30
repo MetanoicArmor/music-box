@@ -121,14 +121,16 @@ export function getMpvIpcConnectPath(): string {
   return path.join(ROOT, "data", "mpv.sock");
 }
 
+const binExt = process.platform === "win32" ? ".exe" : "";
+
 export const PATHS = {
   root: ROOT,
   media: path.join(ROOT, "media"),
   data: path.join(ROOT, "data"),
   db: path.join(ROOT, "data", "music-box.db"),
   bin: path.join(ROOT, "bin"),
-  mpv: path.join(ROOT, "bin", "mpv.exe"),
-  ytdlp: path.join(ROOT, "bin", "yt-dlp.exe"),
+  mpv: path.join(ROOT, "bin", `mpv${binExt}`),
+  ytdlp: path.join(ROOT, "bin", `yt-dlp${binExt}`),
   clientDist: path.join(ROOT, "dist", "client"),
   uploadTmp: path.join(ROOT, "data", "upload-tmp"),
 };

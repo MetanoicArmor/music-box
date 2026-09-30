@@ -52,5 +52,9 @@ Set-Location $android
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 $apk = Join-Path $android "app\build\outputs\apk\release\app-release.apk"
+$releaseDir = Join-Path $root "release"
+New-Item -ItemType Directory -Path $releaseDir -Force | Out-Null
+$published = Join-Path $releaseDir "MusicBox-android.apk"
+Copy-Item $apk $published -Force
 Write-Host ""
-Write-Host "Android APK: $apk"
+Write-Host "Android APK: $published"

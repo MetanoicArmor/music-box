@@ -1,0 +1,161 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to create or update
+        required: true
+        default: v1.0.0
+        type: string
+      replace_existing:
+        description: Replace assets already attached to the release
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    name: Windows
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.20.0"
+          cache: npm
+      - run: npm ci
+      - run: powershell -ExecutionPolicy Bypass -File scripts/build-release.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MusicBox-win64
+          path: release/MusicBox-win64.zip
+          if-no-files-found: error
+
+  macos:
+    name: macOS
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.20.0"
+          cache: npm
+      - run: npm ci
+      - run: bash scripts/build-release.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MusicBox-macos
+          path: release/MusicBox-macos-*.tar.gz
+          if-no-files-found: error
+
+  linux:
+    name: Linux
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.20.0"
+          cache: npm
+      - name: Install archive tools
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends curl unzip xz-utils python3 make g++
+      - name: Build portable archive
+        env:
+          MUSICBOX_SKIP_SYSTEM_MPV: "1"
+        run: bash scripts/build-release.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MusicBox-linux
+          path: release/MusicBox-linux-*.tar.gz
+          if-no-files-found: error
+
+  android:
+    name: Android
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.20.0"
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK packages
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
+      - run: npm ci
+      - run: npm run build:client
+      - run: bash scripts/build-android.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MusicBox-android
+          path: release/MusicBox-android.apk
+          if-no-files-found: error
+
+  publish:
+    name: Publish
+    needs: [windows, macos, linux, android]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist-artifacts
+          merge-multiple: true
+      - name: Upload to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+          REPLACE: ${{ github.event_name == 'push' || github.event.inputs.replace_existing == 'true' }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(dist-artifacts/*)
+          if [[ ${#files[@]} -eq 0 ]]; then
+            echo "No release files were downloaded."
+            exit 1
+          fi
+          ls -lh dist-artifacts
+          version="${TAG#v}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            if [[ "$REPLACE" == "true" ]]; then
+              gh release upload "$TAG" "${files[@]}" --clobber
+            else
+              existing="$(gh release view "$TAG" --json assets --jq '.assets[].name')"
+              for file in "${files[@]}"; do
+                name="$(basename "$file")"
+                if grep -qx "$name" <<< "$existing"; then
+                  echo "Keeping existing asset: $name"
+                else
+                  gh release upload "$TAG" "$file"
+                fi
+              done
+            fi
+            gh release edit "$TAG" --notes-file scripts/release-notes.md
+          else
+            gh release create "$TAG" "${files[@]}" \
+              --title "Music Box $version" \
+              --notes-file scripts/release-notes.md
+          fi
+          gh release view "$TAG" --json url,assets --jq '{url:.url, assets:[.assets[].name]}'

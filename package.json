@@ -12,9 +12,12 @@
     "build:client": "vite build",
     "build:server": "tsc -p tsconfig.server.json",
     "start": "node dist/server/index.js",
-    "setup": "powershell -ExecutionPolicy Bypass -File scripts/setup-binaries.ps1",
-    "release": "powershell -ExecutionPolicy Bypass -File scripts/build-release.ps1",
-    "build:android": "npm run build:client && powershell -ExecutionPolicy Bypass -File scripts/build-android.ps1"
+    "setup": "node scripts/run-platform.mjs setup",
+    "release": "node scripts/run-platform.mjs release",
+    "release:macos": "node scripts/run-platform.mjs release-macos",
+    "release:linux": "node scripts/run-platform.mjs release-linux",
+    "stop": "node scripts/run-platform.mjs stop",
+    "build:android": "npm run build:client && node scripts/run-platform.mjs android"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",

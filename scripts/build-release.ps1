@@ -11,6 +11,44 @@ Write-Host ""
 Write-Host "Music Box - Release Build" -ForegroundColor Cyan
 Write-Host ""
 
+function Copy-MpvFromDir($sourceDir, $binDir) {
+    $exe = Join-Path $sourceDir "mpv.exe"
+    if (-not (Test-Path $exe)) { return $false }
+    Copy-Item $exe (Join-Path $binDir "mpv.exe") -Force
+    Get-ChildItem -Path $sourceDir -Filter "*.dll" -File -ErrorAction SilentlyContinue |
+        Copy-Item -Destination $binDir -Force
+    return $true
+}
+
+function Ensure-Mpv {
+    $Bin = Join-Path $ReleaseDir "bin"
+    New-Item -ItemType Directory -Path $Bin -Force | Out-Null
+    if (Test-Path (Join-Path $Bin "mpv.exe")) { return }
+
+    $SourceBin = Join-Path $Root "bin"
+    if (Copy-MpvFromDir $SourceBin $Bin) {
+        Write-Host "  mpv.exe copied from bin\" -ForegroundColor Green
+        return
+    }
+
+    $MpvTag = "v0.41.0"
+    $Asset = "mpv-$MpvTag-x86_64-w64-mingw32.zip"
+    New-Item -ItemType Directory -Path $CacheDir -Force | Out-Null
+    $Zip = Join-Path $CacheDir $Asset
+    if (-not (Test-Path $Zip)) {
+        $url = "https://github.com/mpv-player/mpv/releases/download/$MpvTag/$Asset"
+        Write-Host "Downloading mpv $MpvTag..." -ForegroundColor Yellow
+        Invoke-WebRequest -Uri $url -OutFile $Zip -UseBasicParsing
+    }
+    $Extract = Join-Path $CacheDir "mpv-extract"
+    if (Test-Path $Extract) { Remove-Item $Extract -Recurse -Force }
+    Expand-Archive -Path $Zip -DestinationPath $Extract -Force
+    $Found = Get-ChildItem -Path $Extract -Filter "mpv.exe" -Recurse | Select-Object -First 1
+    if (-not $Found) { throw "mpv.exe not found in $Asset" }
+    if (-not (Copy-MpvFromDir $Found.DirectoryName $Bin)) { throw "failed to copy mpv.exe" }
+    Write-Host "  mpv.exe OK" -ForegroundColor Green
+}
+
 function Ensure-NodeRuntime {
     $RuntimeDir = Join-Path $ReleaseDir "runtime"
     $NodeExe = Join-Path $RuntimeDir "node.exe"
@@ -74,12 +112,10 @@ try {
     New-Item -ItemType Directory -Path (Join-Path $ReleaseDir "media") -Force | Out-Null
     New-Item -ItemType Directory -Path (Join-Path $ReleaseDir "data") -Force | Out-Null
 
-    if (Test-Path (Join-Path $Root "bin\mpv.exe")) {
-        Copy-Item (Join-Path $Root "bin\mpv.exe") (Join-Path $ReleaseDir "bin\mpv.exe") -Force
-    }
     if (Test-Path (Join-Path $Root "bin\yt-dlp.exe")) {
         Copy-Item (Join-Path $Root "bin\yt-dlp.exe") (Join-Path $ReleaseDir "bin\yt-dlp.exe") -Force
     }
+    Ensure-Mpv
 
     Write-Host "Installing production dependencies..." -ForegroundColor Yellow
     Push-Location $ReleaseDir
@@ -92,13 +128,10 @@ try {
     Write-Host "Downloading yt-dlp (if missing)..." -ForegroundColor Yellow
     $Ytdlp = Join-Path $ReleaseDir "bin\yt-dlp.exe"
     if (-not (Test-Path $Ytdlp)) {
-        try {
-            Invoke-WebRequest -Uri "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe" -OutFile $Ytdlp -UseBasicParsing
-            Write-Host "  yt-dlp.exe OK" -ForegroundColor Green
-        } catch {
-            Write-Host "  yt-dlp download failed (YouTube will not work offline bundle build)" -ForegroundColor Yellow
-        }
+        Invoke-WebRequest -Uri "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe" -OutFile $Ytdlp -UseBasicParsing
+        Write-Host "  yt-dlp.exe OK" -ForegroundColor Green
     }
+    if (-not (Test-Path $Ytdlp)) { throw "yt-dlp.exe is missing" }
 
     $ReadmeSrc = Join-Path $Root "scripts\release-readme.txt"
     $ReadmeDst = Join-Path $ReleaseDir "START-HERE.txt"

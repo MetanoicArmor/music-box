@@ -21,6 +21,8 @@
 | Платформа | Файл |
 |-----------|------|
 | Windows (portable) | [MusicBox-win64.zip](https://github.com/MetanoicArmor/music-box/releases/latest/download/MusicBox-win64.zip) |
+| macOS (Apple Silicon) | [MusicBox-macos-arm64.tar.gz](https://github.com/MetanoicArmor/music-box/releases/latest/download/MusicBox-macos-arm64.tar.gz) |
+| Linux x64 | [MusicBox-linux-x64.tar.gz](https://github.com/MetanoicArmor/music-box/releases/latest/download/MusicBox-linux-x64.tar.gz) |
 | Android (хост) | [MusicBox-android.apk](https://github.com/MetanoicArmor/music-box/releases/latest/download/MusicBox-android.apk) |
 
 ## Быстрый старт
@@ -34,12 +36,20 @@
 3. Смените пароль в `config.json` (`adminPassword`)
 4. Гостям — QR-код из админки (или ссылку из консоли)
 
-Собрать архив самому: `npm run release` (нужен Node.js).
+Собрать архив самому (нужен Node.js):
+
+```bash
+npm run release            # Windows → ZIP, macOS/Linux → tar.gz текущей ОС
+npm run release:linux      # Linux x64; с Mac — через Docker
+npm run release:macos      # только на Mac
+```
+
+На macOS и Linux запуск собранной папки: `./start.sh` (на Mac ещё `MusicBox.command`).
 
 ### Из исходников (для разработки)
 
 1. Установите [Node.js 20+](https://nodejs.org/)
-2. Дважды кликните `start.bat` (или `MusicBox.bat`)
+2. Windows: дважды кликните `start.bat` (или `MusicBox.bat`). macOS/Linux: `./start.sh` (на Mac можно открыть `MusicBox.command`)
 3. Смените пароль в `config.json` (`adminPassword`)
 4. Гостям — QR из админки или Network-ссылка из консоли
 
@@ -75,15 +85,18 @@ npm install
 npm run dev          # сервер :3000 + клиент :5173
 npm run build        # production build
 npm start            # запуск production
-npm run setup        # скачать mpv + yt-dlp
-npm run release      # portable ZIP для Windows (release/MusicBox-win64.zip)
+npm run setup        # скачать mpv + yt-dlp (Windows, macOS, Linux)
+npm run release      # portable-архив текущей ОС (release/)
+npm run release:linux   # Linux x64, с Mac через Docker
 ```
+
+Тег `v*` на GitHub запускает сборку всех четырёх файлов и публикует их в релиз. Обновить уже существующий релиз: Actions → Release → Run workflow.
 
 ## Open-air тусовка
 
 1. Поднимите WiFi (роутер или hotspot с телефона)
 2. Подключите ноутбук и колонки (AUX / Bluetooth)
-3. Запустите `start.bat`
+3. Запустите `start.bat` (Windows) или `./start.sh` (macOS/Linux)
 4. Раздайте гостям QR-код из админки (`/admin`)
 5. Без интернета работают только загруженные mp3/mp4
 
@@ -113,25 +126,27 @@ APK: `android/app/build/outputs/apk/release/app-release.apk`. Нужны JDK 17 
 
 ## Зависимости
 
-- **Node.js 20+** — сервер и UI
-- **mpv** — воспроизведение на Windows (скачивается через `npm run setup`)
+- **Node.js 20+** — сервер и UI (в portable-архив кладётся Node.js 22)
+- **mpv** — воспроизведение (`npm run setup`: Windows через winget, macOS — официальная сборка в `bin/`, Linux — пакет дистрибутива)
 - **yt-dlp** — YouTube/Spotify резолв (скачивается через `npm run setup`)
 
-Если mpv не скачался автоматически: `winget install shinchiro.mpv` (или просто запустите `start.bat` — установит сам)
+Если mpv не встал сам: Windows — `winget install shinchiro.mpv`; Linux — `sudo apt install mpv` (или `dnf` / `pacman`). `start.bat` / `./start.sh` вызывают установку сами.
 
 ## Структура
 
 ```
 music-box/
-├── start.bat           # запуск одной кнопкой
-├── stop.bat            # остановка сервера и mpv
+├── start.bat           # запуск на Windows
+├── start.sh            # запуск на macOS и Linux
+├── stop.bat            # остановка на Windows
+├── stop.sh             # остановка на macOS и Linux
 ├── config.json         # настройки
 ├── server/             # Fastify API + WebSocket + mpv
 ├── client/             # React UI
 ├── android/            # Kotlin-хост (Ktor + ExoPlayer)
 ├── media/              # загруженные файлы
 ├── data/               # SQLite база
-└── bin/                # mpv.exe, yt-dlp.exe
+└── bin/                # mpv и yt-dlp (на Windows — .exe)
 ```
 
 ## Лицензия

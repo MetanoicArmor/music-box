@@ -2,7 +2,7 @@ import { spawn, ChildProcess } from "child_process";
 import fs from "fs";
 import net from "net";
 import path from "path";
-import { getMpvIpcServerArg, getMpvIpcConnectPath } from "../config.js";
+import { getMpvIpcServerArg, getMpvIpcConnectPath, PATHS } from "../config.js";
 import {
   getNextTrack,
   getPreviousTrack,
@@ -34,13 +34,18 @@ type PendingRequest = {
 };
 
 function resolveMpvPath(): string {
-  const binMpv = path.join(process.cwd(), "bin", "mpv.exe");
-  if (fs.existsSync(binMpv)) return binMpv;
+  if (fs.existsSync(PATHS.mpv)) return PATHS.mpv;
 
-  const candidates = [
-    path.join(process.env.ProgramFiles ?? "C:\\Program Files", "MPV Player", "mpv.exe"),
-    path.join(process.env["ProgramFiles(x86)"] ?? "C:\\Program Files (x86)", "MPV Player", "mpv.exe"),
-  ];
+  const candidates =
+    process.platform === "win32"
+      ? [
+          path.join(process.env.ProgramFiles ?? "C:\\Program Files", "MPV Player", "mpv.exe"),
+          path.join(process.env["ProgramFiles(x86)"] ?? "C:\\Program Files (x86)", "MPV Player", "mpv.exe"),
+        ]
+      : process.platform === "darwin"
+        ? ["/opt/homebrew/bin/mpv", "/usr/local/bin/mpv"]
+        : ["/usr/bin/mpv", "/usr/local/bin/mpv", "/snap/bin/mpv"];
+
   for (const candidate of candidates) {
     if (fs.existsSync(candidate)) return candidate;
   }
@@ -95,6 +100,13 @@ export class MpvPlayer {
 
     if (process.platform === "win32") {
       mpvArgs.push("--ao=wasapi");
+    } else {
+      const sock = getMpvIpcConnectPath();
+      try {
+        if (fs.existsSync(sock)) fs.unlinkSync(sock);
+      } catch {
+        // leftover socket from a crashed mpv; next start recreates it
+      }
     }
 
     log.info(`Starting mpv: ${mpvPath}`);
