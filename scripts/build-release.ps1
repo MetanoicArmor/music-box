@@ -43,7 +43,15 @@ function Ensure-Mpv {
     $Extract = Join-Path $CacheDir "mpv-extract"
     if (Test-Path $Extract) { Remove-Item $Extract -Recurse -Force }
     Expand-Archive -Path $Zip -DestinationPath $Extract -Force
-    $Found = Get-ChildItem -Path $Extract -Filter "mpv.exe" -Recurse | Select-Object -First 1
+    $Nested = Get-ChildItem -Path $Extract -Filter "*.zip" -Recurse -File | Select-Object -First 1
+    if ($Nested) {
+        $Inner = Join-Path $Extract "inner"
+        Expand-Archive -Path $Nested.FullName -DestinationPath $Inner -Force
+        $SearchRoot = $Inner
+    } else {
+        $SearchRoot = $Extract
+    }
+    $Found = Get-ChildItem -Path $SearchRoot -Filter "mpv.exe" -Recurse -File | Select-Object -First 1
     if (-not $Found) { throw "mpv.exe not found in $Asset" }
     if (-not (Copy-MpvFromDir $Found.DirectoryName $Bin)) { throw "failed to copy mpv.exe" }
     Write-Host "  mpv.exe OK" -ForegroundColor Green
