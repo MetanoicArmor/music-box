@@ -9,7 +9,7 @@ class ServerProcess : public QObject {
 public:
   explicit ServerProcess(QObject *parent = nullptr);
   ~ServerProcess() override;
-  void start(const QString &root);
+  void start(const QString &installRoot, const QString &dataHome = {});
   void stop();
   bool isRunning() const;
   QString root() const { return root_; }

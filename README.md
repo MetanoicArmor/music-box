@@ -11,13 +11,17 @@
 ## Скриншоты
 
 <p align="center">
-  <img src="screenshots/Screenshot_20260831_155217.png" alt="Сейчас играет" width="280" />
-  &nbsp;
-  <img src="screenshots/Screenshot_20260831_143434.png" alt="Админ на телефоне" width="280" />
+  <img src="screenshots/1.png" alt="Окно хоста: сейчас играет и очередь" width="720" />
 </p>
 
 <p align="center">
-  <img src="screenshots/2026-09-09_21-41-03.png" alt="Админ-панель в браузере" width="720" />
+  <img src="screenshots/2.png" alt="Окно хоста: добавить трек и локальная библиотека" width="720" />
+</p>
+
+<p align="center">
+  <img src="screenshots/3.png" alt="Сайт гостя: сейчас играет" width="280" />
+  &nbsp;
+  <img src="screenshots/4.png" alt="Админ на телефоне" width="280" />
 </p>
 
 ## Скачать

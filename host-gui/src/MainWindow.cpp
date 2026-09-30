@@ -279,8 +279,11 @@ static QPushButton *makeTransportButton(QWidget *parent, const QIcon &icon, cons
   return button;
 }
 
-MainWindow::MainWindow(QString root, QWidget *parent)
-    : QMainWindow(parent), root_(std::move(root)), config_(root_ + "/config.json") {
+MainWindow::MainWindow(QString installRoot, QString dataHome, QWidget *parent)
+    : QMainWindow(parent),
+      root_(std::move(installRoot)),
+      dataHome_(dataHome.isEmpty() ? root_ : std::move(dataHome)),
+      config_(dataHome_ + "/config.json") {
   const auto bindButton = [this](QPushButton *widget, const char *key) {
     widget->setText(ui(key));
     phrases_.append(Phrase{widget, key, Phrase::Button, -1});
@@ -1060,6 +1063,7 @@ void MainWindow::quitApp() {
 
 void MainWindow::loadSettings() {
   if (!config_.load() && !QFile::exists(config_.path())) {
+    QDir().mkpath(dataHome_);
     QFile::copy(root_ + "/config.example.json", config_.path());
     config_.load();
   }
@@ -1104,7 +1108,7 @@ void MainWindow::startServer() {
   awaitingLogin_ = false;
   loadSettings();
   setBanner(BannerStarting);
-  server_.start(root_);
+  server_.start(root_, dataHome_);
   api_.setBase(QUrl(QString("http://127.0.0.1:%1").arg(port_)));
   probe_.start();
 }

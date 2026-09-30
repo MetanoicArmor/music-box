@@ -2,7 +2,12 @@ import os from "os";
 import fs from "fs";
 import path from "path";
 
-const ROOT = process.cwd();
+const INSTALL = process.env.MUSICBOX_ROOT
+  ? path.resolve(process.env.MUSICBOX_ROOT)
+  : process.cwd();
+const HOME = process.env.MUSICBOX_HOME
+  ? path.resolve(process.env.MUSICBOX_HOME)
+  : process.cwd();
 
 export interface AppConfig {
   port: number;
@@ -46,11 +51,11 @@ function parseJsonConfig(text: string): Record<string, unknown> {
 }
 
 function configPath(): string {
-  return path.join(ROOT, "config.json");
+  return path.join(HOME, "config.json");
 }
 
 function examplePath(): string {
-  return path.join(ROOT, "config.example.json");
+  return path.join(INSTALL, "config.example.json");
 }
 
 function fileMtime(file: string): number {
@@ -111,28 +116,28 @@ export function getMpvIpcServerArg(): string {
   if (process.platform === "win32") {
     return `\\\\.\\pipe\\${MPV_IPC_NAME}`;
   }
-  return path.join(ROOT, "data", "mpv.sock");
+  return path.join(HOME, "data", "mpv.sock");
 }
 
 export function getMpvIpcConnectPath(): string {
   if (process.platform === "win32") {
     return `\\\\.\\pipe\\${MPV_IPC_NAME}`;
   }
-  return path.join(ROOT, "data", "mpv.sock");
+  return path.join(HOME, "data", "mpv.sock");
 }
 
 const binExt = process.platform === "win32" ? ".exe" : "";
 
 export const PATHS = {
-  root: ROOT,
-  media: path.join(ROOT, "media"),
-  data: path.join(ROOT, "data"),
-  db: path.join(ROOT, "data", "music-box.db"),
-  bin: path.join(ROOT, "bin"),
-  mpv: path.join(ROOT, "bin", `mpv${binExt}`),
-  ytdlp: path.join(ROOT, "bin", `yt-dlp${binExt}`),
-  clientDist: path.join(ROOT, "dist", "client"),
-  uploadTmp: path.join(ROOT, "data", "upload-tmp"),
+  root: INSTALL,
+  media: path.join(HOME, "media"),
+  data: path.join(HOME, "data"),
+  db: path.join(HOME, "data", "music-box.db"),
+  bin: path.join(INSTALL, "bin"),
+  mpv: path.join(INSTALL, "bin", `mpv${binExt}`),
+  ytdlp: path.join(INSTALL, "bin", `yt-dlp${binExt}`),
+  clientDist: path.join(INSTALL, "dist", "client"),
+  uploadTmp: path.join(HOME, "data", "upload-tmp"),
 };
 
 export function ensureDirs(): void {

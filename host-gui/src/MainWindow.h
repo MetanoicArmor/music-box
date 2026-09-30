@@ -30,7 +30,7 @@ class QSystemTrayIcon;
 class MainWindow : public QMainWindow {
   Q_OBJECT
 public:
-  explicit MainWindow(QString root, QWidget *parent = nullptr);
+  explicit MainWindow(QString installRoot, QString dataHome, QWidget *parent = nullptr);
   ~MainWindow() override;
 
 protected:
@@ -61,6 +61,7 @@ private:
   static QString logAction(const QString &action);
 
   QString root_;
+  QString dataHome_;
   ConfigFile config_;
   ServerProcess server_;
   ApiClient api_;

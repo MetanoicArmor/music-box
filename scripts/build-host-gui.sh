@@ -111,10 +111,23 @@ deploy_macos() {
     log "MusicBox.app was not produced."
     exit 1
   fi
-  "$qt/bin/macdeployqt" "$app" -always-overwrite
+
+  local args=(-always-overwrite -no-codesign)
+  local prefix qt_all
+  prefix="$("$qt/bin/qmake" -query QT_INSTALL_PREFIX)"
+  # Homebrew splits Qt modules across kegs. qmake from qtbase only searches
+  # that keg, so plugins for SVG, PDF and the virtual keyboard fail to deploy.
+  # The qt metapackage links all of them into one lib directory.
+  qt_all="$prefix/opt/qt/lib"
+  if [[ -d "$qt_all" ]]; then
+    args+=("-libpath=$qt_all")
+  fi
+
+  "$qt/bin/macdeployqt" "$app" "${args[@]}"
   rm -rf "$DEST/MusicBox.app"
   cp -R "$app" "$DEST/MusicBox.app"
-  codesign --force --deep --sign - "$DEST/MusicBox.app" || true
+  codesign --force --deep --sign - "$DEST/MusicBox.app"
+  codesign --verify --deep --strict "$DEST/MusicBox.app"
   log "  MusicBox.app OK"
 }
 

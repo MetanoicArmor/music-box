@@ -246,9 +246,41 @@ fi
 
 find "$RELEASE_DIR" -name '.DS_Store' -delete 2>/dev/null || true
 
+# macOS ships one bundle. The program lives in Contents/Resources.
+# Config, the database and media stay outside the bundle so signing stays valid.
+pack_macos_app() {
+  [[ "$OS" == "Darwin" && -d "$RELEASE_DIR/MusicBox.app" ]] || return 0
+  local app="$RELEASE_DIR/MusicBox.app"
+  local res="$app/Contents/Resources"
+  local item
+  for item in dist node_modules runtime bin package.json package-lock.json config.example.json server; do
+    if [[ -e "$RELEASE_DIR/$item" ]]; then
+      rm -rf "$res/$item"
+      mv "$RELEASE_DIR/$item" "$res/$item"
+    fi
+  done
+  chmod +x "$res/runtime/node" 2>/dev/null || true
+  if [[ -f "$res/bin/mpv" ]]; then chmod +x "$res/bin/mpv"; fi
+  if [[ -f "$res/bin/yt-dlp" ]]; then chmod +x "$res/bin/yt-dlp"; fi
+  find "$res" -name '.DS_Store' -delete 2>/dev/null || true
+  codesign --force --deep --sign - "$app"
+  codesign --verify --deep --strict "$app"
+  local staged="$ROOT/release/MusicBox.app"
+  rm -rf "$staged"
+  mv "$app" "$staged"
+  rm -rf "$RELEASE_DIR"
+  RELEASE_DIR="$staged"
+}
+
+pack_macos_app
+
 rm -f "$ARCHIVE"
 log "Creating archive..."
-COPYFILE_DISABLE=1 tar -C "$ROOT/release" -czf "$ARCHIVE" "$RELEASE_NAME"
+if [[ "$OS" == "Darwin" ]]; then
+  COPYFILE_DISABLE=1 tar -C "$ROOT/release" -czf "$ARCHIVE" "MusicBox.app"
+else
+  COPYFILE_DISABLE=1 tar -C "$ROOT/release" -czf "$ARCHIVE" "$RELEASE_NAME"
+fi
 
 log ""
 log "Done."

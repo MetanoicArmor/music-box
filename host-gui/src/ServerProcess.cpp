@@ -2,6 +2,7 @@
 
 #include <QDir>
 #include <QFileInfo>
+#include <QProcessEnvironment>
 
 #ifdef Q_OS_WIN
 #ifndef NOMINMAX
@@ -59,12 +60,17 @@ QString ServerProcess::nodeProgram(const QString &root) const {
   return QStringLiteral("node");
 }
 
-void ServerProcess::start(const QString &root) {
+void ServerProcess::start(const QString &installRoot, const QString &dataHome) {
   if (isRunning()) return;
-  root_ = root;
-  process_.setWorkingDirectory(root);
-  process_.setProgram(nodeProgram(root));
-  process_.setArguments({"dist/server/index.js"});
+  const QString home = dataHome.isEmpty() ? installRoot : dataHome;
+  root_ = installRoot;
+  QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+  env.insert(QStringLiteral("MUSICBOX_ROOT"), installRoot);
+  env.insert(QStringLiteral("MUSICBOX_HOME"), home);
+  process_.setProcessEnvironment(env);
+  process_.setWorkingDirectory(home);
+  process_.setProgram(nodeProgram(installRoot));
+  process_.setArguments({QDir(installRoot).filePath(QStringLiteral("dist/server/index.js"))});
 #ifdef Q_OS_UNIX
   QProcess::UnixProcessParameters params;
   params.flags = QProcess::UnixProcessFlag::CreateNewSession;
