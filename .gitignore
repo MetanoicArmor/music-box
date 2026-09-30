@@ -16,3 +16,4 @@ android/build/
 android/app/build/
 android/local.properties
 android/.idea/
+host-gui/build/

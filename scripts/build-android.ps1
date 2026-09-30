@@ -1,6 +1,9 @@
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $android = Join-Path $root "android"
+$appVersion = (& node (Join-Path $root "scripts\sync-version.mjs")).Trim()
+if ($LASTEXITCODE -ne 0 -or -not $appVersion) { throw "Could not read VERSION" }
+Write-Host "Music Box $appVersion - Android"
 
 function Find-JavaHome {
   $candidates = @()

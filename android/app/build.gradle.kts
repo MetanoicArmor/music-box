@@ -13,8 +13,11 @@ android {
         applicationId = "com.musicbox.host"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        val musicBoxVersion = rootProject.file("../VERSION").readText().trim()
+        val versionParts = musicBoxVersion.split(".")
+        fun versionPart(index: Int) = versionParts.getOrNull(index)?.toIntOrNull() ?: 0
+        versionName = musicBoxVersion
+        versionCode = versionPart(0) * 10000 + versionPart(1) * 100 + versionPart(2)
     }
 
     buildTypes {

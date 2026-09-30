@@ -1,8 +1,8 @@
 ## Downloads
 
-- **MusicBox-win64.zip** — portable Windows host. Распаковать и запустить `MusicBox.bat`.
-- **MusicBox-macos-arm64.tar.gz** — portable macOS (Apple Silicon). Распаковать и запустить `./start.sh` или `MusicBox.command`.
-- **MusicBox-linux-x64.tar.gz** — portable Linux x64. Распаковать и запустить `./start.sh`. Если нет mpv: `sudo apt install mpv` (или `dnf` / `pacman`).
+- **MusicBox-win64.zip** — portable Windows host. Распаковать и запустить `MusicBox.exe`.
+- **MusicBox-macos-arm64.tar.gz** — portable macOS (Apple Silicon). Распаковать и открыть `MusicBox.app`.
+- **MusicBox-linux-x64.tar.gz** — portable Linux x64. Распаковать и запустить `./MusicBox`. Если нет mpv: `sudo apt install mpv` (или `dnf` / `pacman`). Окну нужны libxcb, libxkbcommon и OpenGL из дистрибутива.
 - **MusicBox-android.apk** — Android-хост (sideload). Гости подключаются по Wi‑Fi к тому же веб-UI.
 
 В архивах для компьютера уже есть Node.js, интерфейс и yt-dlp. На Windows и macOS mpv тоже внутри.

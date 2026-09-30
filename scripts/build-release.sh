@@ -8,6 +8,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 NODE_VERSION="22.20.0"
 RELEASE_NAME="MusicBox"
+APP_VERSION="$(node "$ROOT/scripts/sync-version.mjs")"
 
 log() { printf '%s\n' "$*"; }
 
@@ -54,7 +55,7 @@ docker_build() {
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y --no-install-recommends ca-certificates curl xz-utils python3 make g++ unzip
+apt-get install -y --no-install-recommends ca-certificates curl xz-utils python3 python3-venv make g++ cmake ninja-build patchelf unzip libgl1-mesa-dev libxkbcommon-dev libxcb-cursor0 libfontconfig1 libdbus-1-3
 rm -rf /tmp/src
 mkdir -p /tmp/src
 tar -C /src \
@@ -65,6 +66,7 @@ tar -C /src \
   --exclude media \
   --exclude bin \
   --exclude .git \
+  --exclude host-gui/build \
   -cf - . | tar -C /tmp/src -xf -
 cd /tmp/src
 bash scripts/build-release.sh
@@ -156,7 +158,7 @@ ensure_node() {
 }
 
 log ""
-log "Music Box - Release Build ($SUFFIX)"
+log "Music Box $APP_VERSION - Release Build ($SUFFIX)"
 log ""
 
 if [[ ! -d "$ROOT/node_modules/typescript" ]]; then
@@ -234,6 +236,12 @@ find "$RELEASE_DIR/scripts" -name '*.sh' -exec chmod +x {} \;
 
 if [[ -f "$RELEASE_DIR/START-HERE.txt" ]]; then
   chmod 644 "$RELEASE_DIR/START-HERE.txt"
+fi
+
+bash "$ROOT/scripts/build-host-gui.sh" "$RELEASE_DIR"
+if [[ ! -x "$RELEASE_DIR/MusicBox" && ! -d "$RELEASE_DIR/MusicBox.app" ]]; then
+  log "Host window was not packaged."
+  exit 1
 fi
 
 find "$RELEASE_DIR" -name '.DS_Store' -delete 2>/dev/null || true

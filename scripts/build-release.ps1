@@ -1,5 +1,7 @@
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
+$AppVersion = (& node (Join-Path $Root "scripts\sync-version.mjs")).Trim()
+if ($LASTEXITCODE -ne 0 -or -not $AppVersion) { throw "Could not read VERSION" }
 $ReleaseName = "MusicBox"
 $ReleaseDir = Join-Path $Root "release\$ReleaseName"
 $ZipPath = Join-Path $Root "release\$ReleaseName-win64.zip"
@@ -8,7 +10,7 @@ $CacheDir = Join-Path $Root "release\.cache"
 $NodeZip = Join-Path $CacheDir "node-v$NodeVersion-win-x64.zip"
 
 Write-Host ""
-Write-Host "Music Box - Release Build" -ForegroundColor Cyan
+Write-Host "Music Box $AppVersion - Release Build" -ForegroundColor Cyan
 Write-Host ""
 
 function Copy-MpvFromDir($sourceDir, $binDir) {
@@ -124,6 +126,12 @@ try {
         Copy-Item (Join-Path $Root "bin\yt-dlp.exe") (Join-Path $ReleaseDir "bin\yt-dlp.exe") -Force
     }
     Ensure-Mpv
+
+    $GuiScript = Join-Path $Root "scripts\build-host-gui.ps1"
+    & $GuiScript -Destination $ReleaseDir
+    if (-not (Test-Path (Join-Path $ReleaseDir "MusicBox.exe"))) {
+        throw "MusicBox.exe was not built"
+    }
 
     Write-Host "Installing production dependencies..." -ForegroundColor Yellow
     Push-Location $ReleaseDir
