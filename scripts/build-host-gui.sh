@@ -195,7 +195,12 @@ deploy_macos() {
     exit 1
   fi
 
-  local args=(-always-overwrite -no-codesign)
+  local args=(-always-overwrite)
+  # Qt 6.9 macdeployqt does not know -no-codesign. Newer Qt does, and skipping
+  # its own signature avoids a broken ad-hoc sign on Homebrew's split libraries.
+  if "$qt/bin/macdeployqt" -h 2>&1 | grep -q -- '-no-codesign'; then
+    args+=(-no-codesign)
+  fi
   local prefix qt_all
   prefix="$("$qt/bin/qmake" -query QT_INSTALL_PREFIX)"
   # Homebrew splits Qt modules across kegs. qmake from qtbase only searches
