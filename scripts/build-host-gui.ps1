@@ -79,7 +79,7 @@ if (-not (Test-Path $WinDeploy)) { throw "windeployqt.exe not found in $QtPrefix
 $Cmake = Get-Command cmake -ErrorAction SilentlyContinue
 if (-not $Cmake) { throw "cmake is not on PATH" }
 
-& cmake -S (Join-Path $Root "host-gui") -B $BuildDir -G "Visual Studio 17 2022" -A x64 "-DCMAKE_PREFIX_PATH=$QtPrefix"
+& cmake -S (Join-Path $Root "host-gui") -B $BuildDir -A x64 "-DCMAKE_PREFIX_PATH=$QtPrefix"
 if ($LASTEXITCODE -ne 0) { throw "cmake configure failed" }
 & cmake --build $BuildDir --config Release --parallel
 if ($LASTEXITCODE -ne 0) { throw "cmake build failed" }
