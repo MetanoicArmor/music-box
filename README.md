@@ -1,4 +1,8 @@
 <p align="center">
+  <strong>Русский</strong> · <a href="README.en.md">English</a>
+</p>
+
+<p align="center">
   <img src="host-gui/assets/app-icon.png" alt="Music Box" width="160" />
 </p>
 
