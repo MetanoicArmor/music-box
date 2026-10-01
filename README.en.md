@@ -23,9 +23,9 @@ Guests always open the site in a browser. The host window is available for Windo
 </p>
 
 <p align="center">
-  <img src="screenshots/3.png" alt="Guest site: now playing" width="280" />
+  <img src="screenshots/3.jpg" alt="Guest site: now playing" width="280" />
   &nbsp;
-  <img src="screenshots/4.png" alt="Admin on a phone" width="280" />
+  <img src="screenshots/4.jpg" alt="Admin on a phone" width="280" />
 </p>
 
 ## Download

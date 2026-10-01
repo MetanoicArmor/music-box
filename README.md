@@ -23,9 +23,9 @@
 </p>
 
 <p align="center">
-  <img src="screenshots/3.png" alt="Сайт гостя: сейчас играет" width="280" />
+  <img src="screenshots/3.jpg" alt="Сайт гостя: сейчас играет" width="280" />
   &nbsp;
-  <img src="screenshots/4.png" alt="Админ на телефоне" width="280" />
+  <img src="screenshots/4.jpg" alt="Админ на телефоне" width="280" />
 </p>
 
 ## Скачать
