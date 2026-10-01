@@ -7,7 +7,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
-$QtVersion = "6.8.3"
+$QtVersion = "6.9.3"
 $BuildDir = Join-Path $Root "host-gui\build"
 
 function Find-QtPrefix {

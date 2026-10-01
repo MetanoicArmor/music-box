@@ -6,7 +6,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEST="${1:-}"
-QT_VERSION="6.8.3"
+QT_VERSION="6.9.3"
 BUILD_DIR="$ROOT/host-gui/build"
 
 if [[ -z "$DEST" ]]; then

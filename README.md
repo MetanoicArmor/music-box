@@ -129,7 +129,7 @@ npm run release:macos   # только на Mac
 npm run build:android   # APK хоста
 ```
 
-Для разработки без окна: `start.bat` на Windows и `./start.sh` на macOS/Linux. Окно собирается командой `npm run release` (нужны CMake и компилятор; Qt 6.8.3 скрипт скачает сам, если его нет). Номер версии берётся из файла `VERSION`.
+Для разработки без окна: `start.bat` на Windows и `./start.sh` на macOS/Linux. Окно собирается командой `npm run release` (нужны CMake и компилятор; Qt 6.9.3 скрипт скачает сам, если его нет). Номер версии берётся из файла `VERSION`.
 
 Тег `v*` на GitHub собирает Windows, macOS, Linux и Android и публикует их в релиз. Тег должен совпадать с `VERSION` (`v1.1.0` при `1.1.0`). Обновить уже существующий релиз: Actions → Release → Run workflow.
 
@@ -174,7 +174,7 @@ APK: `android/app/build/outputs/apk/release/app-release.apk`. Нужны JDK 17 
 ## Зависимости
 
 - **Node.js 20+** — сервер и сайт. В архив для компьютера кладётся Node.js 22
-- **Qt 6.8** — окно хоста. В архив попадает само, для `npm run release` скачивается при необходимости
+- **Qt 6.9** — окно хоста. В архив попадает само, для `npm run release` скачивается при необходимости
 - **mpv** — воспроизведение (`npm run setup`: Windows через winget, macOS — сборка в `bin/`, Linux — пакет дистрибутива)
 - **yt-dlp** — YouTube и Spotify (скачивается через `npm run setup`)
 
