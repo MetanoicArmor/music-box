@@ -25,16 +25,21 @@ static QString findInstallRoot() {
   return QCoreApplication::applicationDirPath();
 }
 
+static QString writableDataHome() {
+  const QString home = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+  QDir().mkpath(home);
+  return home;
+}
+
 static QString findDataHome(const QString &install) {
 #ifdef Q_OS_MACOS
-  if (install.contains(QStringLiteral(".app/Contents/Resources"))) {
-    const QString home = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    QDir().mkpath(home);
-    return home;
-  }
+  if (install.contains(QStringLiteral(".app/Contents/Resources"))) return writableDataHome();
 #else
   Q_UNUSED(install);
 #endif
+  // An AppImage is mounted read-only. Config, the database and media go to
+  // the user data directory. The runtime sets APPIMAGE and APPDIR.
+  if (!qgetenv("APPIMAGE").isEmpty() || !qgetenv("APPDIR").isEmpty()) return writableDataHome();
   return install;
 }
 

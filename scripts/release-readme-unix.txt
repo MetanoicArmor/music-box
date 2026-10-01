@@ -4,6 +4,8 @@ Music Box — portable версия для macOS и Linux
 1. Распакуйте архив
 2. macOS: откройте MusicBox.app (или дважды MusicBox.command)
    Linux: ./MusicBox
+   AppImage: chmod +x MusicBox-linux-x64.AppImage && ./MusicBox-linux-x64.AppImage
+   У AppImage настройки и медиа лежат в ~/.local/share/MetanoicArmor/Music Box
 3. Смените пароль в окне хоста
 4. QR-код для гостей — в окне хоста. Гости открывают сайт в браузере
 
@@ -22,6 +24,8 @@ Linux: если воспроизведение не стартует, поста
 
 Окну на Linux нужны системные библиотеки (Qt уже внутри архива):
   sudo apt install libxcb-cursor0 libxkbcommon0 libgl1 libfontconfig1 libdbus-1-3
+  sudo pacman -S --needed xcb-util-cursor libxkbcommon mesa fontconfig dbus
+  sudo dnf install libxkbcommon xcb-util-cursor mesa-libGL fontconfig dbus-libs
 
 Firewall, если телефон не открывает страницу:
   Linux: sudo ufw allow 3000/tcp

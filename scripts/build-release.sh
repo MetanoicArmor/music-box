@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Portable Music Box archive for the current OS.
 #   bash scripts/build-release.sh            # macOS or Linux, this machine
-#   bash scripts/build-release.sh linux      # Linux x64 (Docker if not already Linux x64)
+#   bash scripts/build-release.sh linux      # Linux x64 (Docker on Mac and non-Debian distros)
 #   bash scripts/build-release.sh linux-arm64
+#   MUSICBOX_NATIVE=1                        # link against this distro even on Arch/Fedora
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -45,6 +46,8 @@ docker_build() {
   log ""
   docker run --rm --platform "$platform" -i \
     -e HOME=/tmp \
+    -e HOST_UID="$(id -u)" \
+    -e HOST_GID="$(id -g)" \
     -e MUSICBOX_IN_DOCKER=1 \
     -e MUSICBOX_SKIP_SYSTEM_MPV=1 \
     -e MUSICBOX_MPV_OPTIONAL=1 \
@@ -55,7 +58,7 @@ docker_build() {
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y --no-install-recommends ca-certificates curl xz-utils python3 python3-venv make g++ cmake ninja-build patchelf unzip libgl1-mesa-dev libxkbcommon-dev libxcb-cursor0 libfontconfig1 libdbus-1-3
+apt-get install -y --no-install-recommends ca-certificates curl xz-utils python3 python3-venv make g++ cmake ninja-build patchelf unzip squashfs-tools libgl1 libegl1 libfontconfig1 libdbus-1-3 libxkbcommon0 libxkbcommon-x11-0 libwayland-client0 libwayland-cursor0 libwayland-egl1 libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render0 libxcb-render-util0 libxcb-shape0 libxcb-shm0 libxcb-sync1 libxcb-xfixes0 libxcb-xkb1 libxcb-xinerama0 libxcb-xinput0 libsm6 libice6 libgl1-mesa-dev libxkbcommon-dev
 rm -rf /tmp/src
 mkdir -p /tmp/src
 tar -C /src \
@@ -71,8 +74,51 @@ tar -C /src \
 cd /tmp/src
 bash scripts/build-release.sh
 mkdir -p /out
-cp -f release/*.tar.gz /out/
+rm -rf /out/MusicBox
+cp -a release/MusicBox /out/MusicBox
+cp -f release/*.tar.gz release/*.AppImage /out/
+if [[ -n "${HOST_UID:-}" && -n "${HOST_GID:-}" ]]; then
+  chown -R "$HOST_UID:$HOST_GID" /out/MusicBox /out/*.tar.gz /out/*.AppImage
+fi
 EOF
+}
+
+debian_like_host() {
+  [[ "$(uname -s)" == "Linux" && -f /etc/os-release ]] || return 1
+  local id like
+  id="$(. /etc/os-release && printf '%s' "${ID:-}")"
+  like="$(. /etc/os-release && printf '%s' "${ID_LIKE:-}")"
+  case " ${id} ${like} " in
+    *" debian "*|*" ubuntu "*) return 0 ;;
+  esac
+  return 1
+}
+
+# A binary linked on Arch pulls in that system's glibc and does not start on Ubuntu.
+# Debian 12 is old enough for current Ubuntu and still runs on newer distros.
+portable_container_needed() {
+  [[ "${MUSICBOX_IN_DOCKER:-}" == "1" ]] && return 1
+  [[ "${MUSICBOX_NATIVE:-}" == "1" ]] && return 1
+  [[ "$(uname -s)" != "Linux" ]] && return 1
+  if debian_like_host; then
+    return 1
+  fi
+  return 0
+}
+
+run_portable_container() {
+  local arch="$1"
+  if [[ "$arch" != "x64" && "$arch" != "arm64" ]]; then
+    log "Unsupported architecture: $(uname -m)"
+    exit 1
+  fi
+  log "This system is not Debian or Ubuntu."
+  log "Building the portable archive in Docker (Debian 12) so ./MusicBox starts on Ubuntu and on Arch."
+  if [[ "$arch" == "arm64" ]]; then
+    docker_build linux/arm64
+  else
+    docker_build linux/amd64
+  fi
 }
 
 TARGET="${1:-}"
@@ -82,7 +128,10 @@ case "$TARGET" in
     if [[ "$TARGET" == "linux-arm64" ]]; then want="arm64"; fi
     have="$(host_arch_kind)"
     if [[ "$(uname -s)" == "Linux" && "$have" == "$want" ]]; then
-      :
+      if portable_container_needed; then
+        run_portable_container "$want"
+        exit 0
+      fi
     elif [[ "${MUSICBOX_IN_DOCKER:-}" == "1" ]]; then
       log "Inside Docker but the container architecture is not $want."
       exit 1
@@ -99,6 +148,10 @@ case "$TARGET" in
     if [[ "$TARGET" == "macos" || "$TARGET" == "darwin" ]] && [[ "$(uname -s)" != "Darwin" ]]; then
       log "A macOS release has to be built on a Mac."
       exit 1
+    fi
+    if [[ -z "$TARGET" || "$TARGET" == "host" ]] && portable_container_needed; then
+      run_portable_container "$(host_arch_kind)"
+      exit 0
     fi
     ;;
   *)
@@ -282,8 +335,18 @@ else
   COPYFILE_DISABLE=1 tar -C "$ROOT/release" -czf "$ARCHIVE" "$RELEASE_NAME"
 fi
 
+APPIMAGE=""
+if [[ "$OS" == "Linux" ]]; then
+  APPIMAGE="$ROOT/release/${RELEASE_NAME}-${SUFFIX}.AppImage"
+  log "Creating AppImage..."
+  bash "$ROOT/scripts/build-appimage.sh" "$RELEASE_DIR" "$APPIMAGE"
+fi
+
 log ""
 log "Done."
 log "  Folder: $RELEASE_DIR"
 log "  Archive: $ARCHIVE"
+if [[ -n "$APPIMAGE" ]]; then
+  log "  AppImage: $APPIMAGE"
+fi
 log ""

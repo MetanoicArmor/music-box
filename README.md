@@ -33,6 +33,7 @@
 | Windows | [MusicBox-win64.zip](https://github.com/MetanoicArmor/music-box/releases/latest/download/MusicBox-win64.zip) | `MusicBox.exe` |
 | macOS (Apple Silicon) | [MusicBox-macos-arm64.tar.gz](https://github.com/MetanoicArmor/music-box/releases/latest/download/MusicBox-macos-arm64.tar.gz) | `MusicBox.app` |
 | Linux x64 | [MusicBox-linux-x64.tar.gz](https://github.com/MetanoicArmor/music-box/releases/latest/download/MusicBox-linux-x64.tar.gz) | `./MusicBox` |
+| Linux x64 (AppImage) | [MusicBox-linux-x64.AppImage](https://github.com/MetanoicArmor/music-box/releases/latest/download/MusicBox-linux-x64.AppImage) | сделать исполняемым и запустить |
 | Android (хост) | [MusicBox-android.apk](https://github.com/MetanoicArmor/music-box/releases/latest/download/MusicBox-android.apk) | установить APK |
 
 ## Быстрый старт
@@ -40,7 +41,7 @@
 Архив нужен только на компьютере с колонками. Node.js ставить не нужно: он уже внутри.
 
 1. Скачайте архив своей системы из таблицы выше и распакуйте его.
-2. Запустите окно хоста: **`MusicBox.exe`**, **`MusicBox.app`** или **`./MusicBox`**.
+2. Запустите окно хоста: **`MusicBox.exe`**, **`MusicBox.app`**, **`./MusicBox`** или AppImage.
 3. Смените пароль на вкладке «Настройки» или в `config.json`, поле `adminPassword`.
 4. Покажите гостям QR из окна. Они открывают сайт в браузере, музыка играет на этом компьютере.
 
@@ -50,6 +51,8 @@
 
 ```bash
 sudo apt install libxcb-cursor0 libxkbcommon0 libgl1 libfontconfig1 libdbus-1-3
+sudo pacman -S --needed xcb-util-cursor libxkbcommon mesa fontconfig dbus
+sudo dnf install libxkbcommon xcb-util-cursor mesa-libGL fontconfig dbus-libs
 ```
 
 Консоль без окна: `start.bat` или `./start.sh`.
@@ -121,7 +124,7 @@ npm run build           # production build
 npm start               # запуск production
 npm run setup           # скачать mpv + yt-dlp
 npm run release         # архив текущей ОС, вместе с окном хоста
-npm run release:linux   # Linux x64; с Mac — через Docker
+npm run release:linux   # Linux x64; с Mac и с Arch/Fedora — через Docker
 npm run release:macos   # только на Mac
 npm run build:android   # APK хоста
 ```

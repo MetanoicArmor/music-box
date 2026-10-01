@@ -29,30 +29,111 @@ ensure_cmake() {
   exit 1
 }
 
+have_lib() {
+  local listing
+  listing="$(ldconfig -p 2>/dev/null || true)"
+  [[ "$listing" == *"$1 "* ]]
+}
+
+libs_missing() {
+  local listing
+  listing="$(ldd "$1" 2>/dev/null || true)"
+  [[ "$listing" == *"not found"* ]]
+}
+
 ensure_linux_packages() {
   [[ "$(uname -s)" == "Linux" ]] || return 0
-  local missing=0
-  command -v cmake >/dev/null 2>&1 || missing=1
-  command -v g++ >/dev/null 2>&1 || missing=1
-  command -v patchelf >/dev/null 2>&1 || missing=1
-  command -v python3 >/dev/null 2>&1 || missing=1
-  if [[ ! -e /usr/lib/x86_64-linux-gnu/libGL.so && ! -e /usr/lib/aarch64-linux-gnu/libGL.so && ! -e /usr/lib64/libGL.so ]]; then
-    missing=1
+
+  local pm=""
+  if command -v apt-get >/dev/null 2>&1; then
+    pm="apt"
+  elif command -v pacman >/dev/null 2>&1; then
+    pm="pacman"
+  elif command -v dnf >/dev/null 2>&1; then
+    pm="dnf"
   fi
-  if [[ "$missing" == "0" ]]; then
+
+  local -A need=()
+  command -v cmake >/dev/null 2>&1 || need[cmake]=1
+  command -v g++ >/dev/null 2>&1 || need[compiler]=1
+  command -v make >/dev/null 2>&1 || need[compiler]=1
+  command -v patchelf >/dev/null 2>&1 || need[patchelf]=1
+  command -v python3 >/dev/null 2>&1 || need[python]=1
+  if ! python3 -c 'import venv' >/dev/null 2>&1; then
+    need[python]=1
+  fi
+  have_lib "libGL.so.1" || need[gl]=1
+  have_lib "libxkbcommon.so.0" || need[xkb]=1
+  have_lib "libxcb-cursor.so.0" || need[cursor]=1
+  have_lib "libfontconfig.so.1" || need[font]=1
+  have_lib "libdbus-1.so.3" || need[dbus]=1
+
+  if [[ ${#need[@]} -eq 0 ]]; then
     return 0
   fi
-  local pkgs=(cmake g++ make ninja-build patchelf python3 python3-venv libgl1-mesa-dev libxkbcommon-dev libxcb-cursor0 libfontconfig1 libdbus-1-3)
-  if [[ "$(id -u)" -eq 0 ]]; then
-    apt-get update
-    apt-get install -y --no-install-recommends "${pkgs[@]}"
-  elif command -v sudo >/dev/null 2>&1; then
-    sudo apt-get update
-    sudo apt-get install -y --no-install-recommends "${pkgs[@]}"
-  else
-    log "Install packages: ${pkgs[*]}"
+  if [[ -z "$pm" ]]; then
+    log "Missing build dependencies: ${!need[*]}"
+    log "Install cmake, g++, make, patchelf, python3, plus OpenGL, libxkbcommon, libxcb-cursor, fontconfig and dbus."
     exit 1
   fi
+
+  local -a pkgs=()
+  local key
+  for key in "${!need[@]}"; do
+    case "$pm:$key" in
+      apt:cmake) pkgs+=(cmake) ;;
+      apt:compiler) pkgs+=(g++ make) ;;
+      apt:patchelf) pkgs+=(patchelf) ;;
+      apt:python) pkgs+=(python3 python3-venv) ;;
+      apt:gl) pkgs+=(libgl1 libgl1-mesa-dev) ;;
+      apt:xkb) pkgs+=(libxkbcommon0 libxkbcommon-dev) ;;
+      apt:cursor) pkgs+=(libxcb-cursor0) ;;
+      apt:font) pkgs+=(libfontconfig1) ;;
+      apt:dbus) pkgs+=(libdbus-1-3) ;;
+      pacman:cmake) pkgs+=(cmake) ;;
+      pacman:compiler) pkgs+=(gcc make) ;;
+      pacman:patchelf) pkgs+=(patchelf) ;;
+      pacman:python) pkgs+=(python) ;;
+      pacman:gl) pkgs+=(mesa) ;;
+      pacman:xkb) pkgs+=(libxkbcommon) ;;
+      pacman:cursor) pkgs+=(xcb-util-cursor) ;;
+      pacman:font) pkgs+=(fontconfig) ;;
+      pacman:dbus) pkgs+=(dbus) ;;
+      dnf:cmake) pkgs+=(cmake) ;;
+      dnf:compiler) pkgs+=(gcc-c++ make) ;;
+      dnf:patchelf) pkgs+=(patchelf) ;;
+      dnf:python) pkgs+=(python3) ;;
+      dnf:gl) pkgs+=(mesa-libGL) ;;
+      dnf:xkb) pkgs+=(libxkbcommon) ;;
+      dnf:cursor) pkgs+=(xcb-util-cursor) ;;
+      dnf:font) pkgs+=(fontconfig) ;;
+      dnf:dbus) pkgs+=(dbus-libs) ;;
+    esac
+  done
+
+  log "Installing packages: ${pkgs[*]}"
+  run_root() {
+    if [[ "$(id -u)" -eq 0 ]]; then
+      "$@"
+    elif command -v sudo >/dev/null 2>&1; then
+      sudo "$@"
+    else
+      log "sudo is required to install: ${pkgs[*]}"
+      exit 1
+    fi
+  }
+  case "$pm" in
+    apt)
+      run_root apt-get update
+      run_root apt-get install -y --no-install-recommends "${pkgs[@]}"
+      ;;
+    pacman)
+      run_root pacman -S --needed --noconfirm "${pkgs[@]}"
+      ;;
+    dnf)
+      run_root dnf install -y "${pkgs[@]}"
+      ;;
+  esac
 }
 
 find_qt() {
@@ -90,10 +171,12 @@ install_qt() {
   mkdir -p "$cache"
   if [[ ! -x "$venv/bin/aqt" ]]; then
     python3 -m venv "$venv"
-    "$venv/bin/pip" install --disable-pip-version-check "aqtinstall==3.1.19"
+    # pip writes its progress to stdout. The caller captures this function's
+    # stdout as the Qt path, so the install log has to stay on stderr.
+    "$venv/bin/pip" install --disable-pip-version-check "aqtinstall==3.1.19" >&2
   fi
   log "Downloading Qt $QT_VERSION..."
-  "$venv/bin/aqt" install-qt "$host" desktop "$QT_VERSION" "$arch" -O "$out" --internal
+  "$venv/bin/aqt" install-qt "$host" desktop "$QT_VERSION" "$arch" -O "$out" --internal >&2
   local qmake
   qmake="$(find "$out" -type f -name qmake -print -quit)"
   if [[ -z "$qmake" ]]; then
@@ -131,8 +214,41 @@ deploy_macos() {
   log "  MusicBox.app OK"
 }
 
+qmake_is_qt6() {
+  local ver
+  ver="$("$1" -query QT_VERSION 2>/dev/null || true)"
+  [[ "$ver" == 6.* ]]
+}
+
+qt_qmake() {
+  local prefix="$1"
+  local candidate
+  # Arch keeps Qt 5 at /usr/bin/qmake and Qt 6 at qmake6. Same prefix, different plugins.
+  for candidate in \
+    "$prefix/bin/qmake6" \
+    "$prefix/lib/qt6/bin/qmake6" \
+    "$prefix/lib/qt6/bin/qmake"; do
+    if [[ -x "$candidate" ]] && qmake_is_qt6 "$candidate"; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  if command -v qmake6 >/dev/null 2>&1 && qmake_is_qt6 "$(command -v qmake6)"; then
+    command -v qmake6
+    return 0
+  fi
+  for candidate in "$prefix/bin/qmake" "$(command -v qmake 2>/dev/null || true)"; do
+    if [[ -n "$candidate" && -x "$candidate" ]] && qmake_is_qt6 "$candidate"; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
 deploy_linux() {
   local qt="$1"
+  local qmake="$2"
   local bin="$BUILD_DIR/MusicBox"
   if [[ ! -x "$bin" ]]; then
     log "MusicBox binary was not produced."
@@ -143,17 +259,149 @@ deploy_linux() {
   chmod +x "$DEST/MusicBox"
   rm -rf "$DEST/lib" "$DEST/plugins"
   mkdir -p "$DEST/lib" "$DEST/plugins"
-  find "$qt/lib" -maxdepth 1 \( -name 'lib*.so' -o -name 'lib*.so.*' \) -exec cp -a {} "$DEST/lib/" \;
-  local plug
-  for plug in platforms imageformats tls xcbglintegrations platforminputcontexts iconengines; do
-    if [[ -d "$qt/plugins/$plug" ]]; then
-      mkdir -p "$DEST/plugins/$plug"
-      cp -a "$qt/plugins/$plug"/. "$DEST/plugins/$plug/"
+
+  # The release binary's RPATH points at ./lib, which is still empty.
+  # Official Qt is not on the linker path inside Docker, so ldd only sees
+  # those libraries when the Qt prefix is added for the scan.
+  local qt_libs
+  qt_libs="$("$qmake" -query QT_INSTALL_LIBS)"
+  export LD_LIBRARY_PATH="${qt_libs}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+
+  # Distro Qt lives in /usr/lib next to glibc. Copying that directory
+  # produces a binary that loads its own libc and does not start.
+  # Bundle Qt itself, plus libraries shipped inside a private Qt prefix.
+  local private=0
+  case "$qt" in
+    /|/usr|/usr/lib|/usr/lib64|/usr/lib/*) private=0 ;;
+    *) private=1 ;;
+  esac
+
+  never_bundle() {
+    case "$1" in
+      linux-vdso.so*|ld-linux*.so*|libc.so*|libm.so*|libdl.so*|librt.so*|libpthread.so*|libresolv.so*|libutil.so*|libnss_*.so*|libnsl.so*|libstdc++.so*|libgcc_s.so*|libgomp.so*)
+        return 0
+        ;;
+    esac
+    return 1
+  }
+
+  should_bundle() {
+    local path="$1"
+    local base
+    base="$(basename "$path")"
+    if never_bundle "$base"; then
+      return 1
     fi
+    case "$base" in
+      libQt6*.so*) return 0 ;;
+    esac
+    [[ "$private" == "1" && "$path" == "$qt"/* ]]
+  }
+
+  local plugins_root pattern src real dest_dir
+  plugins_root="$("$qmake" -query QT_INSTALL_PLUGINS)"
+  local plug
+  for plug in platforms imageformats tls xcbglintegrations platforminputcontexts iconengines wayland-shell-integration wayland-decoration-client; do
+    [[ -d "$plugins_root/$plug" ]] || continue
+    dest_dir="$DEST/plugins/$plug"
+    mkdir -p "$dest_dir"
+    case "$plug" in
+      platforminputcontexts|wayland-shell-integration|wayland-decoration-client) pattern='*.so' ;;
+      *) pattern='libq*.so' ;;
+    esac
+    while IFS= read -r src; do
+      [[ -n "$src" ]] || continue
+      if libs_missing "$src"; then
+        local missing_line
+        log "Skipping $(basename "$src"): a library it needs is not installed"
+        while IFS= read -r missing_line; do
+          [[ "$missing_line" == *"not found"* ]] && log "  $missing_line"
+        done < <(ldd "$src" 2>/dev/null || true)
+        continue
+      fi
+      real="$(readlink -f "$src")"
+      cp -a "$real" "$dest_dir/$(basename "$real")"
+    done < <(find "$plugins_root/$plug" -maxdepth 1 \( -type f -o -type l \) -name "$pattern")
   done
+
+  local -A seen=()
+  local -a queue=()
+  local missing=0
+
+  bundle_file() {
+    local src="$1"
+    local real base soname
+    real="$(readlink -f "$src")"
+    [[ -n "$real" && -f "$real" ]] || return 0
+    # ldd of an already bundled library resolves siblings inside DEST/lib.
+    if [[ "$real" == "$DEST/lib/"* ]]; then
+      return 0
+    fi
+    if ! should_bundle "$real"; then
+      return 0
+    fi
+    if [[ -n "${seen[$real]:-}" ]]; then
+      return 0
+    fi
+    seen["$real"]=1
+    base="$(basename "$real")"
+    cp -a "$real" "$DEST/lib/$base"
+    soname="$(patchelf --print-soname "$DEST/lib/$base" 2>/dev/null || true)"
+    if [[ -n "$soname" && "$soname" != "$base" ]]; then
+      ln -sfn "$base" "$DEST/lib/$soname"
+    fi
+    queue+=("$DEST/lib/$base")
+  }
+
+  scan_deps() {
+    local file="$1"
+    local line path
+    while IFS= read -r line; do
+      if [[ "$line" == *"not found"* ]]; then
+        log "Missing library for $(basename "$file"): ${line#"${line%%[![:space:]]*}"}"
+        missing=1
+        continue
+      fi
+      if [[ "$line" =~ ^[[:space:]]*([^[:space:]]+)[[:space:]]=\>[[:space:]]([^[:space:]]+) ]]; then
+        path="${BASH_REMATCH[2]}"
+        bundle_file "$path"
+      fi
+    done < <(ldd "$file" 2>/dev/null || true)
+  }
+
+  queue=("$DEST/MusicBox")
+  while IFS= read -r src; do
+    [[ -n "$src" ]] && queue+=("$src")
+  done < <(find "$DEST/plugins" -type f -name '*.so')
+
+  local index=0
+  while [[ "$index" -lt ${#queue[@]} ]]; do
+    scan_deps "${queue[$index]}"
+    index=$((index + 1))
+  done
+  if [[ "$missing" != "0" ]]; then
+    log "Refusing to package MusicBox with missing libraries."
+    exit 1
+  fi
+
   patchelf --set-rpath '$ORIGIN/lib' "$DEST/MusicBox"
-  find "$DEST/lib" -type f \( -name 'lib*.so' -o -name 'lib*.so.*' \) -exec patchelf --set-rpath '$ORIGIN' {} \;
-  find "$DEST/plugins" -type f -name '*.so*' -exec patchelf --set-rpath '$ORIGIN/../../lib' {} \;
+  find "$DEST/lib" -type f -name 'lib*.so*' -exec patchelf --set-rpath '$ORIGIN' {} +
+  find "$DEST/plugins" -type f -name '*.so' -exec patchelf --set-rpath '$ORIGIN/../../lib' {} +
+  if libs_missing "$DEST/MusicBox"; then
+    log "MusicBox still has missing libraries:"
+    ldd "$DEST/MusicBox" >&2 || true
+    exit 1
+  fi
+  if [[ ! -f "$DEST/plugins/platforms/libqxcb.so" ]] || libs_missing "$DEST/plugins/platforms/libqxcb.so"; then
+    log "Qt xcb platform plugin was not packaged."
+    exit 1
+  fi
+  local xcb_deps
+  xcb_deps="$(ldd "$DEST/plugins/platforms/libqxcb.so" 2>/dev/null || true)"
+  if [[ "$xcb_deps" != *libQt6Gui.so* ]]; then
+    log "Packaged xcb plugin is not Qt 6."
+    exit 1
+  fi
   cat > "$DEST/qt.conf" << 'EOF'
 [Paths]
 Prefix = .
@@ -197,23 +445,38 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
   rm -rf "$iconset"
 fi
 
+# Keep the last absolute path. Installers sometimes print logs on stdout.
+qt_prefix_from() {
+  local line path=""
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
+    [[ "$line" == /* ]] && path="$line"
+  done
+  printf '%s\n' "$path"
+}
+
 QT_PREFIX=""
-if QT_PREFIX="$(find_qt)"; then
-  :
+if found="$(find_qt)"; then
+  QT_PREFIX="$(printf '%s\n' "$found" | qt_prefix_from)"
 else
-  QT_PREFIX="$(install_qt)"
+  QT_PREFIX="$(install_qt | qt_prefix_from)"
 fi
-if [[ ! -x "$QT_PREFIX/bin/qmake" ]]; then
-  log "Qt prefix is not usable: $QT_PREFIX"
+if [[ -z "$QT_PREFIX" || ! -d "$QT_PREFIX" ]]; then
+  log "Qt prefix is not usable: ${QT_PREFIX:-<empty>}"
   exit 1
 fi
+QMAKE="$(qt_qmake "$QT_PREFIX")" || {
+  log "Qt prefix is not usable: $QT_PREFIX"
+  exit 1
+}
 
 cmake -S "$ROOT/host-gui" -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$QT_PREFIX"
 cmake --build "$BUILD_DIR" --parallel
 
 case "$(uname -s)" in
   Darwin) deploy_macos "$QT_PREFIX" ;;
-  Linux) deploy_linux "$QT_PREFIX" ;;
+  Linux) deploy_linux "$QT_PREFIX" "$QMAKE" ;;
   *)
     log "Host window build is not implemented for $(uname -s). Use build-host-gui.ps1 on Windows."
     exit 1
